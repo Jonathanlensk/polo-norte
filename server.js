@@ -46,7 +46,7 @@ const products = [
 const units = {
   julio: {
     nome: "Júlio de Mesquita",
-    taxa: 8.00
+    taxa: 0.00
   },
 
   vila: {
