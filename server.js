@@ -9,15 +9,12 @@ const { randomUUID } = require("crypto");
 const app = express();
 
 const PORT = Number(process.env.PORT || 3000);
-
 const MP_API = "https://api.mercadopago.com";
 
 app.use(cors());
-
 app.use(express.json({ limit: "1mb" }));
 
 const dataDir = path.join(__dirname, "data");
-
 const ordersFile = path.join(dataDir, "orders.json");
 
 if (!fs.existsSync(dataDir)) {
@@ -27,6 +24,10 @@ if (!fs.existsSync(dataDir)) {
 if (!fs.existsSync(ordersFile)) {
   fs.writeFileSync(ordersFile, "[]", "utf8");
 }
+
+/*
+  PRODUTOS
+*/
 
 const products = [
   { id: 1, nome: "Heineken", preco: 6.60 },
@@ -38,10 +39,19 @@ const products = [
   { id: 7, nome: "Red Label", preco: 89.90 },
   { id: 8, nome: "Tanqueray", preco: 89.90 },
   { id: 9, nome: "Red Bull", preco: 8.90 },
-  { id: 10, nome: "Água Mineral", preco: 0.1 },
+
+  // ÁGUA ALTERADA PARA R$ 0,10
+  { id: 10, nome: "Água Mineral", preco: 0.10 },
+
   { id: 11, nome: "Coca-Cola", preco: 11.90 },
   { id: 12, nome: "Gelo em Cubo", preco: 9.90 }
 ];
+
+/*
+  UNIDADES
+
+  FRETE ZERADO PARA TODAS
+*/
 
 const units = {
   julio: {
@@ -51,18 +61,26 @@ const units = {
 
   vila: {
     nome: "Vila Helena",
-    taxa: 8.00
+    taxa: 0.00
   },
 
   divino: {
     nome: "Largo do Divino",
-    taxa: 10.00
+    taxa: 0.00
   }
 };
+
+/*
+  LER PEDIDOS
+*/
 
 function readOrders() {
   return JSON.parse(fs.readFileSync(ordersFile, "utf8"));
 }
+
+/*
+  SALVAR PEDIDOS
+*/
 
 function writeOrders(orders) {
   fs.writeFileSync(
@@ -72,9 +90,20 @@ function writeOrders(orders) {
   );
 }
 
+/*
+  ARREDONDAR VALORES
+*/
+
 function money(value) {
   return Number(Number(value).toFixed(2));
 }
+
+/*
+  CALCULAR CARRINHO
+
+  Os valores são calculados novamente no backend
+  para evitar alteração de preço pelo navegador.
+*/
 
 function calculateCart(items, unitId) {
   if (!Array.isArray(items) || items.length === 0) {
@@ -88,18 +117,19 @@ function calculateCart(items, unitId) {
   }
 
   const normalized = [];
-
   let subtotal = 0;
 
   for (const item of items) {
     const product = products.find(
-      p => p.id === Number(item.id)
+      (p) => p.id === Number(item.id)
     );
 
     const quantity = Number(item.quantidade);
 
     if (!product) {
-      throw new Error(`Produto inválido: ${item.id}`);
+      throw new Error(
+        `Produto inválido: ${item.id}`
+      );
     }
 
     if (
@@ -123,7 +153,6 @@ function calculateCart(items, unitId) {
   }
 
   const entrega = unit.taxa;
-
   const total = money(subtotal + entrega);
 
   return {
@@ -134,6 +163,10 @@ function calculateCart(items, unitId) {
     unidade: unit
   };
 }
+
+/*
+  HEADERS DE AUTENTICAÇÃO
+*/
 
 function authHeaders(idempotencyKey) {
   if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
@@ -148,11 +181,19 @@ function authHeaders(idempotencyKey) {
     "Authorization":
       `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
 
-    "X-Idempotency-Key": idempotencyKey
+    "X-Idempotency-Key":
+      idempotencyKey
   };
 }
 
-async function mercadoPagoRequest(endpoint, options = {}) {
+/*
+  REQUISIÇÃO PARA O MERCADO PAGO
+*/
+
+async function mercadoPagoRequest(
+  endpoint,
+  options = {}
+) {
   const response = await fetch(
     `${MP_API}${endpoint}`,
     options
@@ -174,10 +215,12 @@ async function mercadoPagoRequest(endpoint, options = {}) {
   console.log("MERCADO PAGO RESPONSE");
   console.log("Endpoint:", endpoint);
   console.log("Status:", response.status);
+
   console.log(
     "Resposta:",
     JSON.stringify(data, null, 2)
   );
+
   console.log("==============================\n");
 
   if (!response.ok) {
@@ -205,6 +248,10 @@ async function mercadoPagoRequest(endpoint, options = {}) {
   return data;
 }
 
+/*
+  SALVAR PEDIDO LOCAL
+*/
+
 function saveLocalOrder(order) {
   const orders = readOrders();
 
@@ -214,18 +261,19 @@ function saveLocalOrder(order) {
 }
 
 /*
-  CORREÇÃO DO STATUS DO PAGAMENTO
+  PEGAR STATUS REAL DO PAGAMENTO
 
-  O Mercado Pago pode retornar:
+  PRIORIDADE:
 
-  Order:
-  processed
+  1. payment.status
+  2. mpOrder.status
 
-  Payment:
-  approved
+  Exemplo:
 
-  Para saber se o pagamento foi realmente aprovado,
-  priorizamos sempre o status do payment.
+  Order: processed
+  Payment: approved
+
+  O status retornado será APPROVED.
 */
 
 function getPaymentStatus(mpOrder) {
@@ -255,11 +303,13 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
 
-    service: "Polo Norte Bebidas API",
+    service:
+      "Polo Norte Bebidas API",
 
-    mercadoPagoConfigured: Boolean(
-      process.env.MERCADO_PAGO_ACCESS_TOKEN
-    )
+    mercadoPagoConfigured:
+      Boolean(
+        process.env.MERCADO_PAGO_ACCESS_TOKEN
+      )
   });
 });
 
@@ -288,9 +338,12 @@ app.post("/api/orders", async (req, res) => {
       pagamento
     } = req.body;
 
-    if (!["pix", "cartao"].includes(metodo)) {
+    if (
+      !["pix", "cartao"].includes(metodo)
+    ) {
       return res.status(400).json({
-        message: "Método de pagamento inválido."
+        message:
+          "Método de pagamento inválido."
       });
     }
 
@@ -323,45 +376,75 @@ app.post("/api/orders", async (req, res) => {
     const idempotencyKey =
       randomUUID();
 
+    /*
+      PEDIDO LOCAL
+    */
+
     const localOrder = {
       orderNumber,
 
       externalReference,
 
-      status: "pending",
+      status:
+        "pending",
 
-      statusDetail: null,
+      statusDetail:
+        null,
 
-      paymentMethod: metodo,
+      paymentMethod:
+        metodo,
 
-      unidade: unidadeId,
+      unidade:
+        unidadeId,
 
       cliente: {
-        nome: endereco.nome,
-        email: endereco.email,
-        whatsapp: endereco.whatsapp
+        nome:
+          endereco.nome,
+
+        email:
+          endereco.email,
+
+        whatsapp:
+          endereco.whatsapp
       },
 
       endereco: {
-        cep: endereco.cep,
-        rua: endereco.rua,
-        numero: endereco.numero,
-        bairro: endereco.bairro,
-        cidade: endereco.cidade || "",
-        uf: endereco.uf || "",
+        cep:
+          endereco.cep,
+
+        rua:
+          endereco.rua,
+
+        numero:
+          endereco.numero,
+
+        bairro:
+          endereco.bairro,
+
+        cidade:
+          endereco.cidade || "",
+
+        uf:
+          endereco.uf || "",
+
         complemento:
           endereco.complemento || "",
+
         referencia:
           endereco.referencia || ""
       },
 
-      itens: cart.itens,
+      itens:
+        cart.itens,
 
-      subtotal: cart.subtotal,
+      subtotal:
+        cart.subtotal,
 
-      entrega: cart.entrega,
+      entrega:
+        cart.entrega,
 
-      total: cart.total,
+      total:
+        cart.total,
 
       createdAt:
         new Date().toISOString()
@@ -375,9 +458,11 @@ app.post("/api/orders", async (req, res) => {
 
     if (metodo === "pix") {
       const body = {
-        type: "online",
+        type:
+          "online",
 
-        processing_mode: "automatic",
+        processing_mode:
+          "automatic",
 
         total_amount:
           cart.total.toFixed(2),
@@ -392,16 +477,19 @@ app.post("/api/orders", async (req, res) => {
                 cart.total.toFixed(2),
 
               payment_method: {
-                id: "pix",
+                id:
+                  "pix",
 
-                type: "bank_transfer"
+                type:
+                  "bank_transfer"
               }
             }
           ]
         },
 
         payer: {
-          email: endereco.email
+          email:
+            endereco.email
         }
       };
 
@@ -409,10 +497,13 @@ app.post("/api/orders", async (req, res) => {
         await mercadoPagoRequest(
           "/v1/orders",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers:
-              authHeaders(idempotencyKey),
+              authHeaders(
+                idempotencyKey
+              ),
 
             body:
               JSON.stringify(body)
@@ -441,9 +532,11 @@ app.post("/api/orders", async (req, res) => {
         "credit_card";
 
       const body = {
-        type: "online",
+        type:
+          "online",
 
-        processing_mode: "automatic",
+        processing_mode:
+          "automatic",
 
         total_amount:
           cart.total.toFixed(2),
@@ -490,10 +583,13 @@ app.post("/api/orders", async (req, res) => {
         await mercadoPagoRequest(
           "/v1/orders",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers:
-              authHeaders(idempotencyKey),
+              authHeaders(
+                idempotencyKey
+              ),
 
             body:
               JSON.stringify(body)
@@ -502,17 +598,23 @@ app.post("/api/orders", async (req, res) => {
     }
 
     /*
-      PEGA O STATUS REAL DO PAGAMENTO
+      PEGAR STATUS REAL
     */
 
     const {
       payment,
       status,
       statusDetail
-    } = getPaymentStatus(mpOrder);
+    } = getPaymentStatus(
+      mpOrder
+    );
 
     const mpPaymentMethod =
       payment.payment_method || {};
+
+    /*
+      ATUALIZAR PEDIDO LOCAL
+    */
 
     localOrder.mercadoPagoOrderId =
       mpOrder.id;
@@ -526,10 +628,17 @@ app.post("/api/orders", async (req, res) => {
     localOrder.statusDetail =
       statusDetail;
 
-    saveLocalOrder(localOrder);
+    saveLocalOrder(
+      localOrder
+    );
+
+    /*
+      RESPOSTA PARA O FRONTEND
+    */
 
     return res.status(201).json({
-      ok: true,
+      ok:
+        true,
 
       orderNumber,
 
@@ -564,7 +673,9 @@ app.post("/api/orders", async (req, res) => {
     );
 
     return res
-      .status(error.status || 500)
+      .status(
+        error.status || 500
+      )
       .json({
         message:
           error.message ||
@@ -577,89 +688,99 @@ app.post("/api/orders", async (req, res) => {
   CONSULTAR STATUS DO PEDIDO
 */
 
-app.get("/api/orders/:id", async (req, res) => {
-  try {
-    const mpOrder =
-      await mercadoPagoRequest(
-        `/v1/orders/${encodeURIComponent(req.params.id)}`,
-        {
-          method: "GET",
+app.get(
+  "/api/orders/:id",
+  async (req, res) => {
+    try {
+      const mpOrder =
+        await mercadoPagoRequest(
+          `/v1/orders/${encodeURIComponent(req.params.id)}`,
+          {
+            method:
+              "GET",
 
-          headers: {
-            "Authorization":
-              `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`
+            headers: {
+              "Authorization":
+                `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`
+            }
           }
-        }
+        );
+
+      /*
+        PRIORIDADE PARA O STATUS
+        DO PAYMENT
+      */
+
+      const {
+        payment,
+        status,
+        statusDetail
+      } = getPaymentStatus(
+        mpOrder
       );
 
-    /*
-      CORREÇÃO:
-      Prioriza payment.status antes de mpOrder.status
-    */
+      const orders =
+        readOrders();
 
-    const {
-      payment,
-      status,
-      statusDetail
-    } = getPaymentStatus(mpOrder);
+      const local =
+        orders.find(
+          (o) =>
+            String(
+              o.mercadoPagoOrderId
+            ) ===
+            String(
+              req.params.id
+            )
+        );
 
-    const orders =
-      readOrders();
+      if (local) {
+        local.status =
+          status;
 
-    const local =
-      orders.find(
-        o =>
-          String(
-            o.mercadoPagoOrderId
-          ) ===
-          String(
-            req.params.id
-          )
-      );
+        local.statusDetail =
+          statusDetail;
 
-    if (local) {
-      local.status =
-        status;
+        local.mercadoPagoPaymentId =
+          payment.id ||
+          local.mercadoPagoPaymentId;
 
-      local.statusDetail =
-        statusDetail;
+        local.updatedAt =
+          new Date().toISOString();
 
-      local.mercadoPagoPaymentId =
-        payment.id ||
-        local.mercadoPagoPaymentId;
+        writeOrders(
+          orders
+        );
+      }
 
-      local.updatedAt =
-        new Date().toISOString();
+      return res.json({
+        orderId:
+          mpOrder.id,
 
-      writeOrders(orders);
-    }
+        paymentId:
+          payment.id || null,
 
-    return res.json({
-      orderId:
-        mpOrder.id,
+        status,
 
-      paymentId:
-        payment.id || null,
-
-      status,
-
-      statusDetail
-    });
-  } catch (error) {
-    console.error(
-      "GET /api/orders/:id:",
-      error.details || error
-    );
-
-    return res
-      .status(error.status || 500)
-      .json({
-        message:
-          error.message ||
-          "Erro ao consultar pedido."
+        statusDetail
       });
+    } catch (error) {
+      console.error(
+        "GET /api/orders/:id:",
+        error.details || error
+      );
+
+      return res
+        .status(
+          error.status || 500
+        )
+        .json({
+          message:
+            error.message ||
+            "Erro ao consultar pedido."
+        });
+    }
   }
-});
+);
 
 /*
   WEBHOOK DO MERCADO PAGO
@@ -669,7 +790,8 @@ app.post(
   "/api/webhooks/mercadopago",
   async (req, res) => {
     /*
-      Responde imediatamente para o Mercado Pago
+      RESPONDE IMEDIATAMENTE
+      PARA O MERCADO PAGO
     */
 
     res.sendStatus(200);
@@ -693,7 +815,8 @@ app.post(
         await mercadoPagoRequest(
           `/v1/orders/${encodeURIComponent(orderId)}`,
           {
-            method: "GET",
+            method:
+              "GET",
 
             headers: {
               "Authorization":
@@ -703,26 +826,30 @@ app.post(
         );
 
       /*
-        CORREÇÃO:
-        Prioriza o status real do pagamento
+        PEGA O STATUS REAL
+        DO PAYMENT
       */
 
       const {
         payment,
         status,
         statusDetail
-      } = getPaymentStatus(mpOrder);
+      } = getPaymentStatus(
+        mpOrder
+      );
 
       const orders =
         readOrders();
 
       const local =
         orders.find(
-          o =>
+          (o) =>
             String(
               o.mercadoPagoOrderId
             ) ===
-            String(orderId)
+            String(
+              orderId
+            )
         );
 
       if (local) {
@@ -739,15 +866,20 @@ app.post(
         local.updatedAt =
           new Date().toISOString();
 
-        writeOrders(orders);
+        writeOrders(
+          orders
+        );
 
         console.log(
           "Pedido atualizado:",
           {
             orderId,
+
             paymentId:
               payment.id,
+
             status,
+
             statusDetail
           }
         );
