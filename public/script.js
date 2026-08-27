@@ -620,16 +620,21 @@ async function processarPagamento(metodo, dadosCartao = null) {
         }
 
         const resposta = await fetch("/api/orders", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+});
 
-        const resultado = await resposta.json();
+const resultado = await resposta.json();
 
-        if (!resposta.ok) {
-            throw new Error(resultado.message || "Não foi possível processar o pagamento.");
-        }
+console.log("RESPOSTA DO BACKEND:", resultado);
+console.log("STATUS HTTP:", resposta.status);
+
+if (!resposta.ok) {
+    throw new Error(
+        resultado.message || "Não foi possível processar o pagamento."
+    );
+}
 
         estado.processando = false;
         estado.numeroPedido = resultado.orderNumber;
