@@ -1431,23 +1431,48 @@ function reiniciarPedido() {
 ===================================================== */
 
 function render() {
-
     const app = document.getElementById("app");
 
     switch (estado.tela) {
+        case "home":
+            app.innerHTML = home();
+            break;
 
-        case "home": app.innerHTML = home(); break;
-        case "menu": app.innerHTML = menu(); break;
-        case "carrinho": app.innerHTML = carrinho(); break;
-        case "endereco": app.innerHTML = endereco(); break;
-        case "entrega": app.innerHTML = entrega(); break;
-        case "pagamento": app.innerHTML = pagamento(); break;
-        case "processando": app.innerHTML = processando(); break;
-        case "confirmacao": app.innerHTML = confirmacao(); break;
-        default: app.innerHTML = home();
+        case "menu":
+            app.innerHTML = menu();
+            break;
 
+        case "carrinho":
+            app.innerHTML = carrinho();
+            break;
+
+        case "endereco":
+            app.innerHTML = endereco();
+            break;
+
+        case "entrega":
+            app.innerHTML = entrega();
+            break;
+
+        case "pagamento":
+            app.innerHTML = pagamento();
+            break;
+
+        case "processando":
+            app.innerHTML = processando();
+            break;
+
+        case "pix":
+            app.innerHTML = pixPagamento();
+            break;
+
+        case "confirmacao":
+            app.innerHTML = confirmacao();
+            break;
+
+        default:
+            app.innerHTML = home();
     }
-
 }
 
 
