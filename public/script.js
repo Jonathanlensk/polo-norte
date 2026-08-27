@@ -1,12 +1,3 @@
-/* =====================================================
-   POLO NORTE BEBIDAS
-   JAVASCRIPT PRINCIPAL
-===================================================== */
-
-/* =====================================================
-   CONFIGURAÇÕES
-===================================================== */
-
 const CONFIG = {
     api: {
         orders: "/api/orders",
@@ -18,11 +9,6 @@ const CONFIG = {
         previsao: "40–60 minutos"
     }
 };
-
-
-/* =====================================================
-   ÍCONES
-===================================================== */
 
 const ICONES = {
     menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
@@ -74,11 +60,6 @@ function icon(nome, tamanho = 18) {
         </svg>
     `;
 }
-
-
-/* =====================================================
-   DADOS
-===================================================== */
 
 const unidades = [
     {
@@ -147,11 +128,6 @@ const produtos = [
     { id: 12, nome: "Gelo em Cubo", detalhe: "Pacote 5kg", categoria: "Gelo", preco: 9.90, emoji: "🧊" }
 ];
 
-
-/* =====================================================
-   ESTADO
-===================================================== */
-
 const estado = {
     tela: "home",
     unidade: null,
@@ -190,11 +166,6 @@ const estado = {
     pix: null
 };
 
-
-/* =====================================================
-   UTILITÁRIOS
-===================================================== */
-
 function dinheiro(valor = 0) {
     return Number(valor).toLocaleString("pt-BR", {
         style: "currency",
@@ -228,11 +199,6 @@ function totalPedido() {
     return subtotal();
 }
 
-
-/* =====================================================
-   CARRINHO
-===================================================== */
-
 function adicionar(id) {
     estado.carrinho[id] = (estado.carrinho[id] || 0) + 1;
     render();
@@ -260,11 +226,6 @@ function excluirProduto(id) {
     render();
 }
 
-
-/* =====================================================
-   NAVEGAÇÃO
-===================================================== */
-
 function ir(tela) {
     estado.tela = tela;
     render();
@@ -279,11 +240,6 @@ function emBreve() {
     alert("Essa área ainda está em construção. 🐧");
 }
 
-
-/* =====================================================
-   FAVORITOS
-===================================================== */
-
 function alternarFavorito(event, id) {
     event.stopPropagation();
 
@@ -293,11 +249,6 @@ function alternarFavorito(event, id) {
 
     render();
 }
-
-
-/* =====================================================
-   RESUMO DO PEDIDO
-===================================================== */
 
 function resumoPedido() {
     return `
@@ -314,11 +265,6 @@ function resumoPedido() {
         </div>
     `;
 }
-
-
-/* =====================================================
-   FORMULÁRIO
-===================================================== */
 
 function atualizarEndereco(campo, valor) {
     estado.endereco[campo] = valor;
@@ -345,11 +291,6 @@ function mensagemErro(campo) {
         ? `<small class="msg-erro">${estado.erros[campo]}</small>`
         : "";
 }
-
-
-/* =====================================================
-   CEP
-===================================================== */
 
 async function buscarCep(cep) {
     estado.buscandoCep = true;
@@ -384,11 +325,6 @@ async function buscarCep(cep) {
         document.getElementById("campo-numero")?.focus();
     });
 }
-
-
-/* =====================================================
-   VALIDAÇÃO
-===================================================== */
 
 function validarEndereco() {
     const e = estado.endereco;
@@ -438,11 +374,6 @@ function avancarEndereco() {
 
     ir("entrega");
 }
-
-
-/* =====================================================
-   PEDIDO / PAGAMENTO
-===================================================== */
 
 function gerarNumeroPedido() {
     return `#${1000 + Math.floor(Math.random() * 9000)}`;
@@ -536,11 +467,6 @@ async function processarPagamento(metodo, dadosCartao = null) {
 
     render();
 }
-
-
-/* =====================================================
-   COMPONENTES
-===================================================== */
 
 function header(voltar = null) {
     return `
@@ -670,11 +596,6 @@ function bottomNav(ativo = "") {
     `;
 }
 
-
-/* =====================================================
-   TELA HOME
-===================================================== */
-
 function home() {
     return `
         <section class="hero">
@@ -762,11 +683,6 @@ function home() {
         </main>
     `;
 }
-
-
-/* =====================================================
-   MENU
-===================================================== */
 
 function menu() {
     const categorias = Object.keys(categoriasInfo);
@@ -994,11 +910,6 @@ function menu() {
     `;
 }
 
-
-/* =====================================================
-   CARRINHO
-===================================================== */
-
 function carrinho() {
     const itens = Object.entries(estado.carrinho);
 
@@ -1175,11 +1086,6 @@ function carrinho() {
         ${bottomNav()}
     `;
 }
-
-
-/* =====================================================
-   ENDEREÇO
-===================================================== */
 
 function endereco() {
     const e = estado.endereco;
@@ -1382,11 +1288,6 @@ function campoEndereco(
     `;
 }
 
-
-/* =====================================================
-   ENTREGA
-===================================================== */
-
 function entrega() {
     const e = estado.endereco;
 
@@ -1483,11 +1384,6 @@ function entrega() {
         ${bottomNav()}
     `;
 }
-
-
-/* =====================================================
-   PAGAMENTO
-===================================================== */
 
 function pagamento() {
     const pixAtivo = estado.pagamento === "pix";
@@ -1597,6 +1493,10 @@ function pagamento() {
 function pixPagamento() {
     const pix = estado.pix || {};
 
+    setTimeout(() => {
+        iniciarVerificacaoPix();
+    }, 500);
+
     const qr = pix.qrCodeBase64
         ? `
             <img
@@ -1681,16 +1581,252 @@ function pixPagamento() {
                         : ""
                 }
 
+                <div
+                    id="pix-status"
+                    style="
+                        margin-top:20px;
+                        text-align:center;
+                        font-weight:bold;
+                    "
+                >
+                    ⏳ Aguardando confirmação do pagamento...
+                </div>
+
+                <button
+                    class="botao-principal"
+                    style="
+                        margin-top:15px;
+                        background:#f59e0b;
+                    "
+                    onclick="simularPagamentoPix()"
+                >
+                    🧪 Simular pagamento aprovado
+                </button>
+
             </div>
 
         </main>
     `;
 }
-
-
 /* =====================================================
-   PROCESSANDO
+   VERIFICAÇÃO DO PAGAMENTO PIX
 ===================================================== */
+
+let intervaloPix = null;
+
+let verificandoPix = false;
+
+
+/*
+    INICIA A VERIFICAÇÃO DO STATUS
+*/
+function iniciarVerificacaoPix() {
+
+    if (intervaloPix) {
+        return;
+    }
+
+    verificarPagamentoPix();
+
+    intervaloPix = setInterval(
+        verificarPagamentoPix,
+        3000
+    );
+}
+
+
+/*
+    CONSULTA O STATUS DO PEDIDO
+*/
+async function verificarPagamentoPix() {
+
+    if (estado.tela !== "pix") {
+
+        pararVerificacaoPix();
+
+        return;
+    }
+
+    if (verificandoPix) {
+        return;
+    }
+
+    const orderId =
+        estado.pix?.mercadoPagoOrderId;
+
+    if (!orderId) {
+
+        console.error(
+            "mercadoPagoOrderId não encontrado."
+        );
+
+        return;
+    }
+
+    verificandoPix = true;
+
+    try {
+
+        const resposta = await fetch(
+            `/api/orders/${encodeURIComponent(orderId)}`
+        );
+
+        const resultado =
+            await resposta.json();
+
+        console.log(
+            "STATUS DO PIX:",
+            resultado
+        );
+
+        if (!resposta.ok) {
+
+            throw new Error(
+                resultado.message ||
+                "Erro ao consultar pagamento."
+            );
+        }
+
+
+        /*
+            PAGAMENTO APROVADO
+        */
+        if (
+            resultado.status === "approved"
+        ) {
+
+            pararVerificacaoPix();
+
+            estado.numeroPedido =
+                resultado.orderNumber ||
+                estado.numeroPedido;
+
+            estado.tela =
+                "confirmacao";
+
+            render();
+
+            return;
+        }
+
+
+        /*
+            PAGAMENTO RECUSADO
+        */
+        if (
+            [
+                "rejected",
+                "cancelled"
+            ].includes(
+                resultado.status
+            )
+        ) {
+
+            pararVerificacaoPix();
+
+            const statusElement =
+                document.getElementById(
+                    "pix-status"
+                );
+
+            if (statusElement) {
+
+                statusElement.innerHTML =
+                    "❌ Pagamento não aprovado.";
+            }
+        }
+
+    } catch (erro) {
+
+        console.error(
+            "Erro verificando PIX:",
+            erro
+        );
+
+    } finally {
+
+        verificandoPix = false;
+    }
+}
+
+
+/*
+    PARA A VERIFICAÇÃO
+*/
+function pararVerificacaoPix() {
+
+    if (intervaloPix) {
+
+        clearInterval(
+            intervaloPix
+        );
+
+        intervaloPix = null;
+    }
+
+    verificandoPix = false;
+}
+
+
+/*
+    SIMULA O PAGAMENTO APROVADO
+*/
+async function simularPagamentoPix() {
+
+    const orderId =
+        estado.pix?.mercadoPagoOrderId;
+
+    if (!orderId) {
+
+        alert(
+            "ID do pedido não encontrado."
+        );
+
+        return;
+    }
+
+    try {
+
+        const resposta = await fetch(
+            `/api/test/approve/${encodeURIComponent(orderId)}`,
+            {
+                method: "POST"
+            }
+        );
+
+        const resultado =
+            await resposta.json();
+
+        if (!resposta.ok) {
+
+            throw new Error(
+                resultado.message ||
+                "Erro ao simular pagamento."
+            );
+        }
+
+        console.log(
+            "PAGAMENTO SIMULADO:",
+            resultado
+        );
+
+        /*
+            VERIFICA IMEDIATAMENTE
+        */
+        await verificarPagamentoPix();
+
+    } catch (erro) {
+
+        console.error(
+            "Erro simulando pagamento:",
+            erro
+        );
+
+        alert(
+            erro.message
+        );
+    }
+}
 
 function processando() {
     const metodo =
@@ -1717,11 +1853,6 @@ function processando() {
         </main>
     `;
 }
-
-
-/* =====================================================
-   CONFIRMAÇÃO
-===================================================== */
 
 function confirmacao() {
     return `
@@ -1804,11 +1935,6 @@ function reiniciarPedido() {
     ir("menu");
 }
 
-
-/* =====================================================
-   RENDERIZAÇÃO
-===================================================== */
-
 const telas = {
     home,
     menu,
@@ -1836,10 +1962,5 @@ function render() {
 
     app.innerHTML = tela();
 }
-
-
-/* =====================================================
-   INICIALIZAÇÃO
-===================================================== */
 
 render();
