@@ -3,9 +3,25 @@
    JAVASCRIPT PRINCIPAL
 ===================================================== */
 
+/* =====================================================
+   CONFIGURAÇÕES
+===================================================== */
+
+const CONFIG = {
+    api: {
+        orders: "/api/orders",
+        config: "/api/config"
+    },
+
+    entrega: {
+        gratuita: true,
+        previsao: "40–60 minutos"
+    }
+};
+
 
 /* =====================================================
-   ÍCONES (SVG inline, sem dependências externas)
+   ÍCONES
 ===================================================== */
 
 const ICONES = {
@@ -42,60 +58,76 @@ const ICONES = {
 };
 
 function icon(nome, tamanho = 18) {
-
-    const conteudo = ICONES[nome] || "";
-
-    return `<svg class="icon" viewBox="0 0 24 24" width="${tamanho}" height="${tamanho}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${conteudo}</svg>`;
-
+    return `
+        <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            width="${tamanho}"
+            height="${tamanho}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            ${ICONES[nome] || ""}
+        </svg>
+    `;
 }
 
 
 /* =====================================================
-   UNIDADES
+   DADOS
 ===================================================== */
 
 const unidades = [
-    { id: "julio", nome: "Júlio de Mesquita", endereco: "R. Lamartine Babo, 1092", bairro: "Júlio de Mesquita Filho", taxa: 8, distancia: "1,8 km" },
-    { id: "vila", nome: "Vila Helena", endereco: "Av. Riusaku Kanizawa, 343", bairro: "Vila Helena", taxa: 8, distancia: "2,4 km" },
-    { id: "divino", nome: "Largo do Divino", endereco: "R. Dr. Luiz Mendes de Almeida, 777", bairro: "Largo do Divino", taxa: 10, distancia: "3,1 km" }
+    {
+        id: "julio",
+        nome: "Júlio de Mesquita",
+        endereco: "R. Lamartine Babo, 1092",
+        bairro: "Júlio de Mesquita Filho",
+        distancia: "1,8 km"
+    },
+    {
+        id: "vila",
+        nome: "Vila Helena",
+        endereco: "Av. Riusaku Kanizawa, 343",
+        bairro: "Vila Helena",
+        distancia: "2,4 km"
+    },
+    {
+        id: "divino",
+        nome: "Largo do Divino",
+        endereco: "R. Dr. Luiz Mendes de Almeida, 777",
+        bairro: "Largo do Divino",
+        distancia: "3,1 km"
+    }
 ];
 
-
-/* =====================================================
-   CATEGORIAS (ícone de cada uma)
-===================================================== */
-
 const categoriasInfo = {
-    "Todos": { icone: "presente" },
-    "Cervejas": { icone: "caneca" },
-    "Destilados": { icone: "garrafa" },
-    "Vinhos": { icone: "taca" },
-    "Refrigerantes": { icone: "lata" },
-    "Energéticos": { icone: "raio" },
-    "Águas": { icone: "gota" },
-    "Gelo": { icone: "floco" }
+    Todos: { icone: "presente" },
+    Cervejas: { icone: "caneca" },
+    Destilados: { icone: "garrafa" },
+    Vinhos: { icone: "taca" },
+    Refrigerantes: { icone: "lata" },
+    Energéticos: { icone: "raio" },
+    Águas: { icone: "gota" },
+    Gelo: { icone: "floco" }
+};
+
+const classesCategoria = {
+    Cervejas: "cat-cervejas",
+    Destilados: "cat-destilados",
+    Vinhos: "cat-vinhos",
+    Refrigerantes: "cat-refrigerantes",
+    Energéticos: "cat-energeticos",
+    Águas: "cat-aguas",
+    Gelo: "cat-gelo"
 };
 
 function classeCategoria(categoria) {
-
-    const mapa = {
-        "Cervejas": "cat-cervejas",
-        "Destilados": "cat-destilados",
-        "Vinhos": "cat-vinhos",
-        "Refrigerantes": "cat-refrigerantes",
-        "Energéticos": "cat-energeticos",
-        "Águas": "cat-aguas",
-        "Gelo": "cat-gelo"
-    };
-
-    return mapa[categoria] || "cat-cervejas";
-
+    return classesCategoria[categoria] || "cat-cervejas";
 }
-
-
-/* =====================================================
-   PRODUTOS
-===================================================== */
 
 const produtos = [
     { id: 1, nome: "Heineken", detalhe: "Long Neck 330ml", categoria: "Cervejas", preco: 6.60, precoOriginal: 7.50, emoji: "🍺" },
@@ -107,33 +139,28 @@ const produtos = [
     { id: 7, nome: "Red Label", detalhe: "Whisky 1L", categoria: "Destilados", preco: 89.90, emoji: "🥃" },
     { id: 8, nome: "Tanqueray", detalhe: "London Dry 750ml", categoria: "Destilados", preco: 89.90, emoji: "🍸" },
     { id: 9, nome: "Red Bull", detalhe: "Lata 250ml", categoria: "Energéticos", preco: 8.90, emoji: "⚡" },
-    { id: 10, nome: "Água Mineral", detalhe: "500ml", categoria: "Águas", preco: 2.50, emoji: "💧" },
+
+    // ÁGUA ALTERADA PARA R$ 0,10
+    { id: 10, nome: "Água Mineral", detalhe: "500ml", categoria: "Águas", preco: 0.10, emoji: "💧" },
+
     { id: 11, nome: "Coca-Cola", detalhe: "2 Litros", categoria: "Refrigerantes", preco: 11.90, emoji: "🥤" },
     { id: 12, nome: "Gelo em Cubo", detalhe: "Pacote 5kg", categoria: "Gelo", preco: 9.90, emoji: "🧊" }
 ];
 
 
 /* =====================================================
-   ESTADO DO SITE
+   ESTADO
 ===================================================== */
 
-let estado = {
-
+const estado = {
     tela: "home",
-
     unidade: null,
-
     categoria: "Todos",
-
     busca: "",
-
     carrinho: {},
-
     favoritos: new Set(),
-
     pagamento: "pix",
 
-    // dados do formulário de entrega, agora conectados aos inputs
     endereco: {
         nome: "",
         email: "",
@@ -148,10 +175,6 @@ let estado = {
         referencia: ""
     },
 
-    // true enquanto o CEP está sendo consultado na API ViaCEP
-    buscandoCep: false,
-
-    // dados do cartão, também conectados aos inputs
     cartao: {
         nome: "",
         numero: "",
@@ -159,89 +182,101 @@ let estado = {
         cvv: ""
     },
 
-    // mensagens de erro de validação, por campo
     erros: {},
-
-    // número do pedido, gerado só depois da confirmação do pagamento
+    buscandoCep: false,
+    processando: false,
+    metodoProcessando: null,
     numeroPedido: null,
-
-    // true enquanto a "API de pagamento" está sendo chamada
-    processando: false
-
+    pix: null
 };
 
 
 /* =====================================================
-   FORMATAÇÃO DE DINHEIRO
+   UTILITÁRIOS
 ===================================================== */
 
-function dinheiro(valor) {
-
-    return valor.toLocaleString(
-        "pt-BR",
-        { style: "currency", currency: "BRL" }
-    );
-
+function dinheiro(valor = 0) {
+    return Number(valor).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+    });
 }
 
+function apenasNumeros(valor = "") {
+    return String(valor).replace(/\D/g, "");
+}
 
-/* =====================================================
-   QUANTIDADE DO CARRINHO
-===================================================== */
+function produtoPorId(id) {
+    return produtos.find(produto => produto.id === Number(id));
+}
 
 function quantidadeCarrinho() {
-
     return Object.values(estado.carrinho)
         .reduce((total, quantidade) => total + quantidade, 0);
-
 }
-
-
-/* =====================================================
-   SUBTOTAL
-===================================================== */
 
 function subtotal() {
+    return Object.entries(estado.carrinho)
+        .reduce((total, [id, quantidade]) => {
+            const produto = produtoPorId(id);
+            return total + (produto ? produto.preco * quantidade : 0);
+        }, 0);
+}
 
-    let total = 0;
-
-    for (const id in estado.carrinho) {
-
-        const produto = produtos.find(p => p.id == id);
-
-        total += produto.preco * estado.carrinho[id];
-
-    }
-
-    return total;
-
+// ENTREGA É GRÁTIS
+function totalPedido() {
+    return subtotal();
 }
 
 
 /* =====================================================
-   ADICIONAR / REMOVER PRODUTO
+   CARRINHO
 ===================================================== */
 
 function adicionar(id) {
-
-    if (!estado.carrinho[id]) estado.carrinho[id] = 0;
-
-    estado.carrinho[id]++;
-
+    estado.carrinho[id] = (estado.carrinho[id] || 0) + 1;
     render();
-
 }
 
 function remover(id) {
-
     if (!estado.carrinho[id]) return;
 
     estado.carrinho[id]--;
 
-    if (estado.carrinho[id] <= 0) delete estado.carrinho[id];
+    if (estado.carrinho[id] <= 0) {
+        delete estado.carrinho[id];
+    }
 
     render();
+}
 
+function limparCarrinho() {
+    estado.carrinho = {};
+    render();
+}
+
+function excluirProduto(id) {
+    delete estado.carrinho[id];
+    render();
+}
+
+
+/* =====================================================
+   NAVEGAÇÃO
+===================================================== */
+
+function ir(tela) {
+    estado.tela = tela;
+    render();
+}
+
+function escolherUnidade(id) {
+    estado.unidade = unidades.find(unidade => unidade.id === id);
+    ir("menu");
+}
+
+function emBreve() {
+    alert("Essa área ainda está em construção. 🐧");
 }
 
 
@@ -250,195 +285,127 @@ function remover(id) {
 ===================================================== */
 
 function alternarFavorito(event, id) {
-
     event.stopPropagation();
 
-    if (estado.favoritos.has(id)) {
-
-        estado.favoritos.delete(id);
-
-    } else {
-
-        estado.favoritos.add(id);
-
-    }
+    estado.favoritos.has(id)
+        ? estado.favoritos.delete(id)
+        : estado.favoritos.add(id);
 
     render();
-
 }
 
 
 /* =====================================================
-   ESCOLHER UNIDADE / NAVEGAÇÃO
+   RESUMO DO PEDIDO
 ===================================================== */
 
-function escolherUnidade(id) {
+function resumoPedido() {
+    return `
+        <div class="resumo">
+            <div class="linha">
+                <span>Subtotal (${quantidadeCarrinho()} itens)</span>
+                <span>${dinheiro(subtotal())}</span>
+            </div>
 
-    estado.unidade = unidades.find(unidade => unidade.id === id);
-
-    estado.tela = "menu";
-
-    render();
-
-}
-
-function ir(tela) {
-
-    estado.tela = tela;
-
-    render();
-
-}
-
-function emBreve() {
-
-    alert("Essa área ainda está em construção. 🐧");
-
+            <div class="linha total">
+                <span>Total</span>
+                <span>${dinheiro(totalPedido())}</span>
+            </div>
+        </div>
+    `;
 }
 
 
 /* =====================================================
-   HELPERS DE FORMULÁRIO
+   FORMULÁRIO
 ===================================================== */
 
-// Atualiza um campo de estado.endereco a partir de um input,
-// sem perder o cursor de digitação nem forçar validação a cada tecla.
 function atualizarEndereco(campo, valor) {
-
     estado.endereco[campo] = valor;
 
-    // limpa o erro daquele campo assim que a pessoa começa a corrigir
     if (estado.erros[campo]) {
-
         delete estado.erros[campo];
-
-        render();
-
     }
 
-    // assim que o CEP tiver 8 dígitos, busca o endereço automaticamente
     if (campo === "cep") {
+        const cep = apenasNumeros(valor);
 
-        const digitos = apenasNumeros(valor);
-
-        if (digitos.length === 8) {
-
-            buscarCep(digitos);
-
+        if (cep.length === 8) {
+            buscarCep(cep);
         }
-
     }
-
-}
-
-
-/* =====================================================
-   BUSCA DE ENDEREÇO PELO CEP (API ViaCEP)
-   -----------------------------------------------------
-   ViaCEP é uma API pública e gratuita, sem necessidade de
-   chave de acesso, então pode ser chamada direto do navegador.
-===================================================== */
-
-function buscarCep(cep) {
-
-    estado.buscandoCep = true;
-
-    delete estado.erros.cep;
-
-    render();
-
-    fetch(`https://viacep.com.br/ws/${cep}/json/`)
-
-        .then(resposta => resposta.json())
-
-        .then(dados => {
-
-            estado.buscandoCep = false;
-
-            if (dados.erro) {
-
-                estado.erros.cep = "CEP não encontrado. Confira o número ou preencha manualmente.";
-
-            } else {
-
-                estado.endereco.rua = dados.logradouro || estado.endereco.rua;
-
-                estado.endereco.bairro = dados.bairro || estado.endereco.bairro;
-
-                estado.endereco.cidade = dados.localidade || "";
-
-                estado.endereco.uf = dados.uf || "";
-
-                // leva o foco pro campo "Número", já que rua/bairro foram preenchidos
-                requestAnimationFrame(() => {
-
-                    const campoNumero = document.getElementById("campo-numero");
-
-                    if (campoNumero) campoNumero.focus();
-
-                });
-
-            }
-
-            render();
-
-        })
-
-        .catch(() => {
-
-            estado.buscandoCep = false;
-
-            estado.erros.cep = "Não foi possível consultar o CEP agora. Preencha o endereço manualmente.";
-
-            render();
-
-        });
-
-}
-
-function atualizarCartao(campo, valor) {
-
-    estado.cartao[campo] = valor;
-
-    if (estado.erros[campo]) {
-
-        delete estado.erros[campo];
-
-        render();
-
-    }
-
 }
 
 function classeErro(campo) {
-
     return estado.erros[campo] ? "erro" : "";
-
 }
 
 function mensagemErro(campo) {
-
     return estado.erros[campo]
         ? `<small class="msg-erro">${estado.erros[campo]}</small>`
         : "";
-
 }
 
 
 /* =====================================================
-   VALIDAÇÃO DE ENDEREÇO
+   CEP
+===================================================== */
+
+async function buscarCep(cep) {
+    estado.buscandoCep = true;
+    delete estado.erros.cep;
+    render();
+
+    try {
+        const resposta = await fetch(
+            `https://viacep.com.br/ws/${cep}/json/`
+        );
+
+        const dados = await resposta.json();
+
+        if (dados.erro) {
+            throw new Error("CEP não encontrado.");
+        }
+
+        estado.endereco.rua = dados.logradouro || "";
+        estado.endereco.bairro = dados.bairro || "";
+        estado.endereco.cidade = dados.localidade || "";
+        estado.endereco.uf = dados.uf || "";
+
+    } catch (erro) {
+        estado.erros.cep =
+            "Não foi possível encontrar o CEP. Preencha manualmente.";
+    }
+
+    estado.buscandoCep = false;
+    render();
+
+    requestAnimationFrame(() => {
+        document.getElementById("campo-numero")?.focus();
+    });
+}
+
+
+/* =====================================================
+   VALIDAÇÃO
 ===================================================== */
 
 function validarEndereco() {
-
     const e = estado.endereco;
-
     const erros = {};
 
-    if (!e.nome.trim()) erros.nome = "Informe seu nome completo.";
-    if (!/^\S+@\S+\.\S+$/.test(e.email.trim())) erros.email = "Informe um e-mail válido.";
+    if (!e.nome.trim()) {
+        erros.nome = "Informe seu nome completo.";
+    }
 
-    if (!/^\(?\d{2}\)?\s?9?\d{4}-?\d{4}$/.test(e.whatsapp.trim())) {
+    if (!/^\S+@\S+\.\S+$/.test(e.email.trim())) {
+        erros.email = "Informe um e-mail válido.";
+    }
+
+    if (
+        !/^\(?\d{2}\)?\s?9?\d{4}-?\d{4}$/
+            .test(e.whatsapp.trim())
+    ) {
         erros.whatsapp = "Informe um WhatsApp válido.";
     }
 
@@ -446,142 +413,40 @@ function validarEndereco() {
         erros.cep = "CEP inválido.";
     }
 
-    if (!e.numero.trim()) erros.numero = "Informe o número.";
+    if (!e.numero.trim()) {
+        erros.numero = "Informe o número.";
+    }
 
-    if (!e.rua.trim()) erros.rua = "Informe a rua.";
+    if (!e.rua.trim()) {
+        erros.rua = "Informe a rua.";
+    }
 
-    if (!e.bairro.trim()) erros.bairro = "Informe o bairro.";
+    if (!e.bairro.trim()) {
+        erros.bairro = "Informe o bairro.";
+    }
 
     estado.erros = erros;
 
     return Object.keys(erros).length === 0;
-
 }
 
 function avancarEndereco() {
-
-    if (validarEndereco()) {
-
-        ir("entrega");
-
-    } else {
-
+    if (!validarEndereco()) {
         render();
-
+        return;
     }
 
+    ir("entrega");
 }
 
 
 /* =====================================================
-   VALIDAÇÃO DE CARTÃO (algoritmo de Luhn)
-===================================================== */
-
-function apenasNumeros(texto) {
-
-    return texto.replace(/\D/g, "");
-
-}
-
-function validarNumeroCartao(numero) {
-
-    const digitos = apenasNumeros(numero);
-
-    if (digitos.length < 13 || digitos.length > 19) return false;
-
-    let soma = 0;
-
-    let alternar = false;
-
-    for (let i = digitos.length - 1; i >= 0; i--) {
-
-        let n = parseInt(digitos[i], 10);
-
-        if (alternar) {
-
-            n *= 2;
-
-            if (n > 9) n -= 9;
-
-        }
-
-        soma += n;
-
-        alternar = !alternar;
-
-    }
-
-    return soma % 10 === 0;
-
-}
-
-function validarValidadeCartao(validade) {
-
-    const match = validade.trim().match(/^(\d{2})\/(\d{2})$/);
-
-    if (!match) return false;
-
-    const mes = parseInt(match[1], 10);
-
-    const ano = parseInt("20" + match[2], 10);
-
-    if (mes < 1 || mes > 12) return false;
-
-    const hoje = new Date();
-
-    // último instante do mês de validade
-    const expira = new Date(ano, mes, 0, 23, 59, 59);
-
-    return expira >= hoje;
-
-}
-
-function validarCVV(cvv) {
-
-    return /^\d{3,4}$/.test(cvv.trim());
-
-}
-
-function validarCartao() {
-
-    const c = estado.cartao;
-
-    const erros = {};
-
-    if (!c.nome.trim()) erros.nomeCartao = "Informe o nome impresso no cartão.";
-
-    if (!validarNumeroCartao(c.numero)) erros.numeroCartao = "Número de cartão inválido.";
-
-    if (!validarValidadeCartao(c.validade)) erros.validade = "Validade inválida ou expirada.";
-
-    if (!validarCVV(c.cvv)) erros.cvv = "CVV inválido.";
-
-    estado.erros = erros;
-
-    return Object.keys(erros).length === 0;
-
-}
-
-
-/* =====================================================
-   NÚMERO DE PEDIDO
+   PEDIDO / PAGAMENTO
 ===================================================== */
 
 function gerarNumeroPedido() {
-
-    // combina timestamp + aleatório para não repetir entre pedidos
-    return "#" + (1000 + Math.floor(Math.random() * 9000));
-
+    return `#${1000 + Math.floor(Math.random() * 9000)}`;
 }
-
-
-/* =====================================================
-   MERCADO PAGO
-   -----------------------------------------------------
-   O frontend nunca recebe o Access Token privado.
-   Pix é criado pelo backend e o cartão usa o Card Payment
-   Brick do Mercado Pago para tokenizar os dados sensíveis.
-===================================================== */
 
 async function finalizarPagamento() {
     if (!validarEndereco()) {
@@ -590,320 +455,312 @@ async function finalizarPagamento() {
         return;
     }
 
-    if (estado.pagamento === "pix") {
-        await processarPagamento("pix");
-    }
+    await processarPagamento("pix");
 }
 
 async function processarPagamento(metodo, dadosCartao = null) {
     estado.processando = true;
     estado.metodoProcessando = metodo;
-    estado.tela = "processando";
     estado.erros = {};
+    estado.tela = "processando";
+
     render();
 
-    const itens = Object.entries(estado.carrinho).map(([id, quantidade]) => ({
-        id: Number(id),
-        quantidade
-    }));
+    const itens = Object.entries(estado.carrinho).map(
+        ([id, quantidade]) => ({
+            id: Number(id),
+            quantidade
+        })
+    );
+
+    const payload = {
+        metodo,
+        unidadeId: estado.unidade.id,
+        itens,
+        endereco: estado.endereco
+    };
+
+    if (dadosCartao) {
+        payload.pagamento = dadosCartao;
+    }
 
     try {
-        const payload = {
-            metodo,
-            unidadeId: estado.unidade.id,
-            itens,
-            endereco: estado.endereco
-        };
+        const resposta = await fetch(CONFIG.api.orders, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
 
-        if (dadosCartao) {
-            payload.pagamento = dadosCartao;
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Não foi possível processar o pagamento."
+            );
         }
 
-        console.log("ENVIANDO PEDIDO PARA /api/orders", payload);
-        
-        const resposta = await fetch("/api/orders", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-});
-
-const resultado = await resposta.json();
-
-console.log("RESPOSTA DO BACKEND:", resultado);
-console.log("STATUS HTTP:", resposta.status);
-
-if (!resposta.ok) {
-    throw new Error(
-        resultado.message || "Não foi possível processar o pagamento."
-    );
-}
+        estado.numeroPedido =
+            resultado.orderNumber || gerarNumeroPedido();
 
         estado.processando = false;
-        estado.numeroPedido = resultado.orderNumber;
 
         if (resultado.paymentMethod === "pix") {
             estado.pix = {
                 qrCode: resultado.qrCode,
                 qrCodeBase64: resultado.qrCodeBase64,
                 ticketUrl: resultado.ticketUrl,
-                mercadoPagoOrderId: resultado.mercadoPagoOrderId
+                mercadoPagoOrderId:
+                    resultado.mercadoPagoOrderId
             };
+
             estado.tela = "pix";
+
         } else if (resultado.status === "approved") {
             estado.tela = "confirmacao";
+
         } else {
-            estado.erros.pagamento = `Pagamento ${resultado.status || "não aprovado"}. ${resultado.statusDetail || ""}`;
+            estado.erros.pagamento =
+                `Pagamento ${resultado.status || "não aprovado"}.`;
+
             estado.tela = "pagamento";
         }
 
-        render();
     } catch (erro) {
         estado.processando = false;
-        estado.tela = "pagamento";
         estado.erros.pagamento = erro.message;
-        render();
-    }
-}
-
-let cardBrickController = null;
-
-async function inicializarCardBrick() {
-    if (estado.pagamento !== "cartao") return;
-
-    const container = document.getElementById("cardPaymentBrick_container");
-    if (!container) return;
-
-    if (!window.POLO_NORTE_PUBLIC_KEY) {
-        try {
-            const configResponse = await fetch("/api/config");
-            const config = await configResponse.json();
-            window.POLO_NORTE_PUBLIC_KEY = config.publicKey;
-        } catch (erro) {
-            console.error("Não foi possível carregar a configuração do Mercado Pago.", erro);
-            return;
-        }
+        estado.tela = "pagamento";
     }
 
-    if (!window.MercadoPago || !window.POLO_NORTE_PUBLIC_KEY) return;
-
-    if (cardBrickController) {
-        try { await cardBrickController.unmount(); } catch (_) {}
-        cardBrickController = null;
-    }
-
-    const mp = new MercadoPago(window.POLO_NORTE_PUBLIC_KEY);
-    const bricksBuilder = mp.bricks();
-
-    const total = Number((subtotal() + estado.unidade.taxa).toFixed(2));
-
-    cardBrickController = await bricksBuilder.create("cardPayment", "cardPaymentBrick_container", {
-        initialization: {
-            amount: total,
-            payer: {
-                email: estado.endereco.email
-            }
-        },
-        callbacks: {
-            onReady: () => {},
-            onSubmit: async (formData, additionalData) => {
-                const pagamento = {
-                    token: formData.token,
-                    transaction_amount: formData.transaction_amount,
-                    installments: formData.installments,
-                    payment_method_id: formData.payment_method_id,
-                    payment_type_id: additionalData.paymentTypeId,
-                    payer: {
-                        email: formData.payer.email,
-                        identification: formData.payer.identification
-                    }
-                };
-
-                await processarPagamento("cartao", pagamento);
-            },
-            onError: (error) => {
-                console.error("Mercado Pago Brick:", error);
-            }
-        }
-    });
+    render();
 }
 
-function pixPagamento() {
-    const pix = estado.pix || {};
-    const qr = pix.qrCodeBase64
-        ? `<img class="pix-qr" src="data:image/png;base64,${pix.qrCodeBase64}" alt="QR Code Pix">`
-        : "";
-
-    return `
-        ${header()}
-        <main class="container confirmacao">
-            <div class="check">${icon("check", 40)}</div>
-            <h1>Pix gerado!</h1>
-            <p class="subtitulo">Pedido ${estado.numeroPedido}. Pague pelo QR Code ou use o Pix Copia e Cola.</p>
-
-            <div class="pedido-card">
-                ${qr}
-                <p>${icon("cartao", 15)} Valor</p>
-                <strong>${dinheiro(subtotal() + estado.unidade.taxa)}</strong>
-
-                ${pix.qrCode ? `
-                    <label style="display:block;margin-top:16px;font-weight:bold">
-                        Pix Copia e Cola
-                        <textarea id="pix-copia-cola" readonly style="width:100%;min-height:110px;margin-top:8px">${pix.qrCode}</textarea>
-                    </label>
-                    <button class="botao-principal" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('pix-copia-cola').value); alert('Código Pix copiado!')">
-                        Copiar Pix
-                    </button>
-                ` : ""}
-
-                ${pix.ticketUrl ? `
-                    <a class="botao-principal" style="display:flex;justify-content:center;text-decoration:none;margin-top:10px"
-                       href="${pix.ticketUrl}" target="_blank" rel="noopener">
-                       Abrir pagamento Pix
-                    </a>
-                ` : ""}
-            </div>
-
-            <button class="botao-principal" onclick="verificarPedido('${pix.mercadoPagoOrderId || ""}')">
-                Verificar pagamento ${icon("seta", 16)}
-            </button>
-        </main>
-    `;
-}
-
-async function verificarPedido(orderId) {
-    if (!orderId) return;
-
-    try {
-        const resposta = await fetch(`/api/orders/${encodeURIComponent(orderId)}`);
-        const dados = await resposta.json();
-
-        if (!resposta.ok) throw new Error(dados.message || "Não foi possível consultar o pedido.");
-
-        if (dados.status === "approved") {
-            estado.tela = "confirmacao";
-            render();
-        } else {
-            alert(`Pagamento ainda não confirmado. Status: ${dados.status || "pendente"}.`);
-        }
-    } catch (erro) {
-        alert(erro.message);
-    }
-}
 
 /* =====================================================
-   HEADER
+   COMPONENTES
 ===================================================== */
 
 function header(voltar = null) {
-
     return `
         <header class="header">
-            <button class="header-btn" onclick="${voltar ? `ir('${voltar}')` : "emBreve()"}">
+
+            <button
+                class="header-btn"
+                onclick="${voltar
+                    ? `ir('${voltar}')`
+                    : "emBreve()"}"
+            >
                 ${icon(voltar ? "voltar" : "menu", 20)}
             </button>
+
             <div class="logo">
-                <img src="logo-polo-norte.png" alt="Polo Norte Bebidas" class="logo-img logo-img-header">
+                <img
+                    src="logo-polo-norte.png"
+                    alt="Polo Norte Bebidas"
+                    class="logo-img logo-img-header"
+                >
             </div>
-            <button class="header-btn header-cart" onclick="ir('carrinho')">
+
+            <button
+                class="header-btn header-cart"
+                onclick="ir('carrinho')"
+            >
                 ${icon("carrinho", 20)}
-                ${quantidadeCarrinho() > 0 ? `<span class="badge">${quantidadeCarrinho()}</span>` : ""}
+
+                ${quantidadeCarrinho()
+                    ? `<span class="badge">
+                        ${quantidadeCarrinho()}
+                    </span>`
+                    : ""
+                }
             </button>
+
         </header>
     `;
-
 }
 
-
-/* =====================================================
-   ETAPAS
-===================================================== */
-
 function etapas(atual) {
-
-    const lista = ["Carrinho", "Endereço", "Entrega", "Pagamento", "Confirmação"];
+    const lista = [
+        "Carrinho",
+        "Endereço",
+        "Entrega",
+        "Pagamento",
+        "Confirmação"
+    ];
 
     return `
         <div class="etapas">
+
             ${lista.map((item, index) => `
-                <div class="etapa ${index === atual ? "ativa" : ""} ${index < atual ? "feita" : ""}">
-                    <div class="etapa-bolha">${index < atual ? icon("check", 14) : index + 1}</div>
-                    <div class="etapa-nome">${item}</div>
+                <div class="
+                    etapa
+                    ${index === atual ? "ativa" : ""}
+                    ${index < atual ? "feita" : ""}
+                ">
+                    <div class="etapa-bolha">
+                        ${
+                            index < atual
+                                ? icon("check", 14)
+                                : index + 1
+                        }
+                    </div>
+
+                    <div class="etapa-nome">
+                        ${item}
+                    </div>
                 </div>
             `).join("")}
+
         </div>
     `;
-
 }
 
-
-/* =====================================================
-   BARRA INFERIOR DE NAVEGAÇÃO
-===================================================== */
-
-function bottomNav(ativo) {
-
+function bottomNav(ativo = "") {
     const itens = [
-        { id: "home", nome: "Início", icone: "casa", tela: "home" },
-        { id: "pedidos", nome: "Pedidos", icone: "caixa" },
-        { id: "favoritos", nome: "Favoritos", icone: "coracao" },
-        { id: "perfil", nome: "Perfil", icone: "usuario" },
-        { id: "mais", nome: "Mais", icone: "menu" }
+        {
+            id: "home",
+            nome: "Início",
+            icone: "casa",
+            tela: "home"
+        },
+        {
+            id: "pedidos",
+            nome: "Pedidos",
+            icone: "caixa"
+        },
+        {
+            id: "favoritos",
+            nome: "Favoritos",
+            icone: "coracao"
+        },
+        {
+            id: "perfil",
+            nome: "Perfil",
+            icone: "usuario"
+        },
+        {
+            id: "mais",
+            nome: "Mais",
+            icone: "menu"
+        }
     ];
 
     return `
         <nav class="bottom-nav">
+
             ${itens.map(item => `
-                <button class="nav-item ${ativo === item.id ? "ativo" : ""}"
-                    onclick="${item.tela ? `ir('${item.tela}')` : "emBreve()"}">
+                <button
+                    class="nav-item
+                    ${ativo === item.id ? "ativo" : ""}"
+
+                    onclick="${
+                        item.tela
+                            ? `ir('${item.tela}')`
+                            : "emBreve()"
+                    }"
+                >
                     ${icon(item.icone, 20)}
                     ${item.nome}
                 </button>
             `).join("")}
+
         </nav>
     `;
-
 }
 
 
 /* =====================================================
-   TELA INICIAL
+   TELA HOME
 ===================================================== */
 
 function home() {
-
     return `
         <section class="hero">
+
             <div class="logo">
-                <img src="logo-polo-norte.png" alt="Polo Norte Bebidas" class="logo-img logo-img-hero">
+                <img
+                    src="logo-polo-norte.png"
+                    alt="Polo Norte Bebidas"
+                    class="logo-img logo-img-hero"
+                >
             </div>
-            <h1>Bebidas geladas<br><span>na sua porta!</span></h1>
+
+            <h1>
+                Bebidas geladas<br>
+                <span>na sua porta!</span>
+            </h1>
+
             <div class="beneficios">
-                <div class="beneficio">${icon("relogio", 14)} Entrega em até 60 min</div>
-                <div class="beneficio">${icon("escudo", 14)} Pagamento 100% seguro</div>
-                <div class="beneficio">${icon("floco", 14)} Bebidas sempre geladas</div>
+                <div class="beneficio">
+                    ${icon("relogio", 14)}
+                    Entrega em até 60 min
+                </div>
+
+                <div class="beneficio">
+                    ${icon("escudo", 14)}
+                    Pagamento 100% seguro
+                </div>
+
+                <div class="beneficio">
+                    ${icon("floco", 14)}
+                    Bebidas sempre geladas
+                </div>
             </div>
+
         </section>
 
         <main class="container">
-            <h1 class="titulo">${icon("pin", 22)} Escolha sua unidade</h1>
-            <p class="subtitulo">Selecione a unidade mais próxima de você</p>
+
+            <h1 class="titulo">
+                ${icon("pin", 22)}
+                Escolha sua unidade
+            </h1>
+
+            <p class="subtitulo">
+                Selecione a unidade mais próxima de você
+            </p>
 
             <div class="unidades">
+
                 ${unidades.map(unidade => `
-                    <button class="unidade" onclick="escolherUnidade('${unidade.id}')">
-                        <div class="unidade-img">${icon("loja", 30)}</div>
-                        <div class="unidade-info">
-                            <h3>${unidade.nome}</h3>
-                            <p>${icon("pin", 13)} ${unidade.endereco}</p>
-                            <span class="aberto"><span class="ponto"></span> Aberto até 00:00</span>
+                    <button
+                        class="unidade"
+                        onclick="escolherUnidade('${unidade.id}')"
+                    >
+
+                        <div class="unidade-img">
+                            ${icon("loja", 30)}
                         </div>
-                        <span class="unidade-seta">${icon("seta", 18)}</span>
+
+                        <div class="unidade-info">
+
+                            <h3>${unidade.nome}</h3>
+
+                            <p>
+                                ${icon("pin", 13)}
+                                ${unidade.endereco}
+                            </p>
+
+                            <span class="aberto">
+                                <span class="ponto"></span>
+                                Aberto até 00:00
+                            </span>
+
+                        </div>
+
+                        <span class="unidade-seta">
+                            ${icon("seta", 18)}
+                        </span>
+
                     </button>
                 `).join("")}
+
             </div>
+
         </main>
     `;
-
 }
 
 
@@ -912,97 +769,229 @@ function home() {
 ===================================================== */
 
 function menu() {
-
     const categorias = Object.keys(categoriasInfo);
 
-    let lista = produtos.filter(produto => {
+    const lista = produtos.filter(produto => {
+        const categoriaOK =
+            estado.categoria === "Todos" ||
+            produto.categoria === estado.categoria;
 
-        const categoriaOK = estado.categoria === "Todos" || produto.categoria === estado.categoria;
-
-        const buscaOK = produto.nome.toLowerCase().includes(estado.busca.toLowerCase());
+        const buscaOK =
+            produto.nome
+                .toLowerCase()
+                .includes(estado.busca.toLowerCase());
 
         return categoriaOK && buscaOK;
-
     });
 
     return `
         ${header("home")}
 
         <main class="container">
+
             <div class="loja-header">
-                <div class="loja-thumb">${icon("loja", 26)}</div>
-                <div class="loja-header-info">
-                    <small>${icon("pin", 12)} Unidade selecionada</small>
-                    <h2>${estado.unidade.nome}</h2>
-                    <span class="status">● Aberto até 00:00 · Entrega rápida</span>
+
+                <div class="loja-thumb">
+                    ${icon("loja", 26)}
                 </div>
+
+                <div class="loja-header-info">
+
+                    <small>
+                        ${icon("pin", 12)}
+                        Unidade selecionada
+                    </small>
+
+                    <h2>${estado.unidade.nome}</h2>
+
+                    <span class="status">
+                        ● Aberto até 00:00 · Entrega rápida
+                    </span>
+
+                </div>
+
             </div>
 
             <div class="busca">
+
                 ${icon("busca", 18)}
-                <input placeholder="Buscar bebidas, marcas e mais..." value="${estado.busca}"
-                    oninput="estado.busca=this.value; render()">
-                <button class="filtro-btn" onclick="emBreve()">${icon("filtro", 18)}</button>
+
+                <input
+                    placeholder="Buscar bebidas, marcas e mais..."
+                    value="${estado.busca}"
+                    oninput="
+                        estado.busca=this.value;
+                        render()
+                    "
+                >
+
+                <button
+                    class="filtro-btn"
+                    onclick="emBreve()"
+                >
+                    ${icon("filtro", 18)}
+                </button>
+
             </div>
 
             <div class="categorias">
+
                 ${categorias.map(categoria => `
-                    <button class="categoria-item ${estado.categoria === categoria ? "ativo" : ""}"
-                        onclick="estado.categoria='${categoria}'; render();">
-                        <span class="categoria-icone">${icon(categoriasInfo[categoria].icone, 20)}</span>
+                    <button
+                        class="categoria-item
+                        ${estado.categoria === categoria ? "ativo" : ""}"
+
+                        onclick="
+                            estado.categoria='${categoria}';
+                            render()
+                        "
+                    >
+
+                        <span class="categoria-icone">
+                            ${icon(
+                                categoriasInfo[categoria].icone,
+                                20
+                            )}
+                        </span>
+
                         ${categoria}
+
                     </button>
                 `).join("")}
+
             </div>
 
             <section class="secao-produtos">
+
                 <div class="secao-topo">
-                    <h2>${estado.categoria === "Todos" ? "Mais pedidos" : estado.categoria}</h2>
-                    <span class="ver-todas" onclick="emBreve()">Ver todas ${icon("seta", 13)}</span>
+
+                    <h2>
+                        ${
+                            estado.categoria === "Todos"
+                                ? "Mais pedidos"
+                                : estado.categoria
+                        }
+                    </h2>
+
                 </div>
 
                 <div class="produtos">
+
                     ${lista.map(produto => `
                         <article class="produto">
-                            ${produto.precoOriginal ? `<span class="badge-desconto">-${Math.round((1 - produto.preco / produto.precoOriginal) * 100)}%</span>` : ""}
-                            <button class="favorito ${estado.favoritos.has(produto.id) ? "ativo" : ""}"
-                                onclick="alternarFavorito(event, ${produto.id})">${icon("coracao", 14)}</button>
-                            <div class="produto-img ${classeCategoria(produto.categoria)}">${produto.emoji}</div>
-                            <h3>${produto.nome}</h3>
-                            <p>${produto.detalhe}</p>
-                            <div class="produto-preco">
-                                ${produto.precoOriginal ? `<span class="preco-antigo">${dinheiro(produto.precoOriginal)}</span>` : ""}
-                                <span class="preco">${dinheiro(produto.preco)}</span>
+
+                            ${
+                                produto.precoOriginal
+                                    ? `
+                                    <span class="badge-desconto">
+                                        -${Math.round(
+                                            (
+                                                1 -
+                                                produto.preco /
+                                                produto.precoOriginal
+                                            ) * 100
+                                        )}%
+                                    </span>
+                                    `
+                                    : ""
+                            }
+
+                            <button
+                                class="favorito
+                                ${
+                                    estado.favoritos.has(produto.id)
+                                        ? "ativo"
+                                        : ""
+                                }"
+
+                                onclick="
+                                    alternarFavorito(
+                                        event,
+                                        ${produto.id}
+                                    )
+                                "
+                            >
+                                ${icon("coracao", 14)}
+                            </button>
+
+                            <div
+                                class="
+                                    produto-img
+                                    ${classeCategoria(
+                                        produto.categoria
+                                    )}
+                                "
+                            >
+                                ${produto.emoji}
                             </div>
-                            <button class="add" onclick="adicionar(${produto.id})">+</button>
+
+                            <h3>${produto.nome}</h3>
+
+                            <p>${produto.detalhe}</p>
+
+                            <div class="produto-preco">
+
+                                ${
+                                    produto.precoOriginal
+                                        ? `
+                                        <span class="preco-antigo">
+                                            ${dinheiro(
+                                                produto.precoOriginal
+                                            )}
+                                        </span>
+                                        `
+                                        : ""
+                                }
+
+                                <span class="preco">
+                                    ${dinheiro(produto.preco)}
+                                </span>
+
+                            </div>
+
+                            <button
+                                class="add"
+                                onclick="adicionar(${produto.id})"
+                            >
+                                +
+                            </button>
+
                         </article>
                     `).join("")}
+
                 </div>
+
             </section>
 
-            <div class="promo-banner">
-                <div class="icone-caminhao">${icon("caminhao", 22)}</div>
-                <div>
-                    <strong>Bebidas geladas na sua porta!</strong>
-                    <span>Entrega rápida e segura</span>
-                </div>
-                <span class="selo">${icon("escudo", 12)} Seguro</span>
-            </div>
         </main>
 
-        ${quantidadeCarrinho() > 0 ? `
-            <div class="carrinho-flutuante">
-                <div class="info">
-                    <small>${quantidadeCarrinho()} itens</small>
-                    <strong>${dinheiro(subtotal())}</strong>
+        ${
+            quantidadeCarrinho() > 0
+                ? `
+                <div class="carrinho-flutuante">
+
+                    <div class="info">
+                        <small>
+                            ${quantidadeCarrinho()} itens
+                        </small>
+
+                        <strong>
+                            ${dinheiro(totalPedido())}
+                        </strong>
+                    </div>
+
+                    <button onclick="ir('carrinho')">
+                        Ver carrinho
+                        ${icon("seta", 15)}
+                    </button>
+
                 </div>
-                <button onclick="ir('carrinho')">Ver carrinho ${icon("seta", 15)}</button>
-            </div>
-        ` : ""}
+                `
+                : ""
+        }
 
         ${bottomNav("home")}
     `;
-
 }
 
 
@@ -1011,7 +1000,6 @@ function menu() {
 ===================================================== */
 
 function carrinho() {
-
     const itens = Object.entries(estado.carrinho);
 
     return `
@@ -1019,76 +1007,173 @@ function carrinho() {
         ${etapas(0)}
 
         <main class="container">
+
             <div class="carrinho-topo">
-                <h1 class="titulo">Seu carrinho</h1>
-                ${itens.length > 0 ? `
-                    <button class="limpar-carrinho" onclick="estado.carrinho={}; render()">
-                        ${icon("lixo", 14)} Limpar carrinho
-                    </button>
-                ` : ""}
+
+                <h1 class="titulo">
+                    Seu carrinho
+                </h1>
+
+                ${
+                    itens.length
+                        ? `
+                        <button
+                            class="limpar-carrinho"
+                            onclick="limparCarrinho()"
+                        >
+                            ${icon("lixo", 14)}
+                            Limpar carrinho
+                        </button>
+                        `
+                        : ""
+                }
+
             </div>
 
-            ${itens.length === 0 ? `
-                <div class="vazio">
-                    <div class="icone-vazio">${icon("carrinho", 40)}</div>
-                    <p>Seu carrinho está vazio.</p>
-                    <button class="botao-principal" onclick="ir('menu')">Ver bebidas ${icon("seta", 16)}</button>
-                </div>
-            ` : itens.map(([id, quantidade]) => {
+            ${
+                !itens.length
+                    ? `
+                    <div class="vazio">
 
-                const produto = produtos.find(p => p.id == id);
+                        <div class="icone-vazio">
+                            ${icon("carrinho", 40)}
+                        </div>
 
-                return `
-                    <div class="item-carrinho">
-                        <div class="item-img ${classeCategoria(produto.categoria)}">${produto.emoji}</div>
-                        <div class="item-info">
-                            <h3>${produto.nome}</h3>
-                            <small>${produto.detalhe} · ${dinheiro(produto.preco)} cada</small>
-                            <div class="quantidade">
-                                <button onclick="remover(${produto.id})">−</button>
-                                <span>${quantidade}</span>
-                                <button onclick="adicionar(${produto.id})">+</button>
+                        <p>
+                            Seu carrinho está vazio.
+                        </p>
+
+                        <button
+                            class="botao-principal"
+                            onclick="ir('menu')"
+                        >
+                            Ver bebidas
+                            ${icon("seta", 16)}
+                        </button>
+
+                    </div>
+                    `
+                    : itens.map(([id, quantidade]) => {
+                        const produto = produtoPorId(id);
+
+                        return `
+                            <div class="item-carrinho">
+
+                                <div class="
+                                    item-img
+                                    ${classeCategoria(
+                                        produto.categoria
+                                    )}
+                                ">
+                                    ${produto.emoji}
+                                </div>
+
+                                <div class="item-info">
+
+                                    <h3>${produto.nome}</h3>
+
+                                    <small>
+                                        ${produto.detalhe}
+                                        ·
+                                        ${dinheiro(produto.preco)}
+                                        cada
+                                    </small>
+
+                                    <div class="quantidade">
+
+                                        <button
+                                            onclick="remover(${produto.id})"
+                                        >
+                                            −
+                                        </button>
+
+                                        <span>
+                                            ${quantidade}
+                                        </span>
+
+                                        <button
+                                            onclick="adicionar(${produto.id})"
+                                        >
+                                            +
+                                        </button>
+
+                                    </div>
+
+                                </div>
+
+                                <div class="item-lado">
+
+                                    <button
+                                        class="item-excluir"
+                                        onclick="
+                                            excluirProduto(
+                                                ${produto.id}
+                                            )
+                                        "
+                                    >
+                                        ${icon("lixo", 14)}
+                                    </button>
+
+                                    <strong>
+                                        ${dinheiro(
+                                            produto.preco * quantidade
+                                        )}
+                                    </strong>
+
+                                </div>
+
                             </div>
+                        `;
+                    }).join("")
+            }
+
+            ${
+                itens.length
+                    ? `
+                    ${resumoPedido()}
+
+                    <div class="seguranca">
+
+                        ${icon("escudo", 22)}
+
+                        <div>
+
+                            <strong>
+                                Pagamento 100% seguro
+                            </strong>
+
+                            <small>
+                                Seus dados protegidos
+                                e criptografados.
+                            </small>
+
+                            <div class="metodos">
+                                <span class="metodo-chip">Pix</span>
+                                <span class="metodo-chip">Visa</span>
+                                <span class="metodo-chip">Mastercard</span>
+                                <span class="metodo-chip">Elo</span>
+                            </div>
+
                         </div>
-                        <div class="item-lado">
-                            <button class="item-excluir" onclick="delete estado.carrinho[${produto.id}]; render()">${icon("lixo", 14)}</button>
-                            <strong>${dinheiro(produto.preco * quantidade)}</strong>
-                        </div>
+
                     </div>
-                `;
+                    `
+                    : ""
+            }
 
-            }).join("")}
-
-            ${itens.length > 0 ? `
-                <div class="resumo">
-                    <div class="linha"><span>Subtotal (${quantidadeCarrinho()} itens)</span><span>${dinheiro(subtotal())}</span></div>
-                    <div class="linha"><span>${icon("caminhao", 14)} Taxa de entrega</span><span>${dinheiro(estado.unidade.taxa)}</span></div>
-                    <div class="linha total"><span>Total</span><span>${dinheiro(subtotal() + estado.unidade.taxa)}</span></div>
-                </div>
-
-                <div class="seguranca">
-                    ${icon("escudo", 22)}
-                    <div>
-                        <strong>Pagamento 100% seguro</strong>
-                        <small>Seus dados protegidos e criptografados.</small>
-                        <div class="metodos">
-                            <span class="metodo-chip">Pix</span>
-                            <span class="metodo-chip">Visa</span>
-                            <span class="metodo-chip">Mastercard</span>
-                            <span class="metodo-chip">Elo</span>
-                        </div>
-                    </div>
-                </div>
-            ` : ""}
-
-            <button class="botao-principal" onclick="ir('endereco')" ${itens.length === 0 ? "disabled" : ""}>
-                Continuar para entrega ${icon("seta", 16)}
+            <button
+                class="botao-principal"
+                onclick="ir('endereco')"
+                ${!itens.length ? "disabled" : ""}
+            >
+                Continuar para entrega
+                ${icon("seta", 16)}
             </button>
+
         </main>
 
-        ${bottomNav("")}
+        ${bottomNav()}
     `;
-
 }
 
 
@@ -1097,7 +1182,6 @@ function carrinho() {
 ===================================================== */
 
 function endereco() {
-
     const e = estado.endereco;
 
     return `
@@ -1105,196 +1189,299 @@ function endereco() {
         ${etapas(1)}
 
         <main class="container">
-            <h1 class="titulo">Endereço de entrega</h1>
-            <p class="subtitulo">Informe onde devemos entregar seu pedido.</p>
 
-            <button class="localizacao" onclick="usarLocalizacaoAtual()">
-                ${icon("pin", 18)} Usar minha localização atual
-            </button>
+            <h1 class="titulo">
+                Endereço de entrega
+            </h1>
+
+            <p class="subtitulo">
+                Informe onde devemos entregar seu pedido.
+            </p>
 
             <div class="form">
-                <label class="full">
-                    Nome completo
-                    <div class="campo-com-icone">
-                        <span class="icone-campo">${icon("usuario", 16)}</span>
-                        <input class="${classeErro('nome')}" placeholder="Digite seu nome"
-                            value="${e.nome}" oninput="atualizarEndereco('nome', this.value)">
-                    </div>
-                    ${mensagemErro('nome')}
-                </label>
 
-                <label class="full">
-                    E-mail
-                    <div class="campo-com-icone">
-                        <span class="icone-campo">${icon("info", 16)}</span>
-                        <input class="${classeErro('email')}" type="email" placeholder="seuemail@email.com"
-                            value="${e.email}" oninput="atualizarEndereco('email', this.value)">
-                    </div>
-                    ${mensagemErro('email')}
-                </label>
+                ${campoEndereco(
+                    "Nome completo",
+                    "nome",
+                    "Digite seu nome",
+                    "usuario"
+                )}
 
-                <label class="full">
-                    WhatsApp
-                    <div class="campo-com-icone">
-                        <span class="icone-campo">${icon("telefone", 16)}</span>
-                        <input class="${classeErro('whatsapp')}" placeholder="(15) 99999-9999"
-                            value="${e.whatsapp}" oninput="atualizarEndereco('whatsapp', this.value)">
-                    </div>
-                    ${mensagemErro('whatsapp')}
-                </label>
+                ${campoEndereco(
+                    "E-mail",
+                    "email",
+                    "seuemail@email.com",
+                    "info",
+                    "email"
+                )}
+
+                ${campoEndereco(
+                    "WhatsApp",
+                    "whatsapp",
+                    "(15) 99999-9999",
+                    "telefone"
+                )}
 
                 <label>
+
                     CEP
-                    <input class="${classeErro('cep')}" placeholder="18053-070"
-                        value="${e.cep}" oninput="atualizarEndereco('cep', this.value)"
-                        inputmode="numeric" maxlength="9">
-                    ${estado.buscandoCep ? `<small class="msg-info">${icon("busca", 11)} Buscando endereço...</small>` : mensagemErro('cep')}
+
+                    <input
+                        class="${classeErro("cep")}"
+                        value="${e.cep}"
+                        placeholder="18053-070"
+                        maxlength="9"
+                        inputmode="numeric"
+                        oninput="
+                            atualizarEndereco(
+                                'cep',
+                                this.value
+                            )
+                        "
+                    >
+
+                    ${
+                        estado.buscandoCep
+                            ? `
+                            <small class="msg-info">
+                                Buscando endereço...
+                            </small>
+                            `
+                            : mensagemErro("cep")
+                    }
+
                 </label>
 
                 <label>
+
                     Número
-                    <input id="campo-numero" class="${classeErro('numero')}" placeholder="Número"
-                        value="${e.numero}" oninput="atualizarEndereco('numero', this.value)">
-                    ${mensagemErro('numero')}
+
+                    <input
+                        id="campo-numero"
+                        class="${classeErro("numero")}"
+                        value="${e.numero}"
+                        placeholder="Número"
+                        oninput="
+                            atualizarEndereco(
+                                'numero',
+                                this.value
+                            )
+                        "
+                    >
+
+                    ${mensagemErro("numero")}
+
                 </label>
 
-                <label class="full">
-                    Rua
-                    <input class="${classeErro('rua')}" placeholder="Preenchido automaticamente pelo CEP"
-                        value="${e.rua}" oninput="atualizarEndereco('rua', this.value)">
-                    ${mensagemErro('rua')}
-                </label>
+                ${campoEndereco(
+                    "Rua",
+                    "rua",
+                    "Rua"
+                )}
 
-                <label class="full">
-                    Bairro
-                    <input class="${classeErro('bairro')}" placeholder="Preenchido automaticamente pelo CEP"
-                        value="${e.bairro}" oninput="atualizarEndereco('bairro', this.value)">
-                    ${mensagemErro('bairro')}
-                </label>
+                ${campoEndereco(
+                    "Bairro",
+                    "bairro",
+                    "Bairro"
+                )}
 
-                ${e.cidade ? `
-                    <label class="full">
-                        Cidade
-                        <input value="${e.cidade} - ${e.uf}" disabled>
-                    </label>
-                ` : ""}
+                ${
+                    e.cidade
+                        ? `
+                        <label class="full">
 
-                <label class="full">
-                    Complemento
-                    <input placeholder="Apartamento, bloco, casa..."
-                        value="${e.complemento}" oninput="atualizarEndereco('complemento', this.value)">
-                </label>
+                            Cidade
 
-                <label class="full">
-                    Ponto de referência
-                    <div class="campo-com-icone">
-                        <span class="icone-campo">${icon("bandeira", 16)}</span>
-                        <input placeholder="Ex.: próximo ao mercado"
-                            value="${e.referencia}" oninput="atualizarEndereco('referencia', this.value)">
-                    </div>
-                </label>
+                            <input
+                                value="${e.cidade} - ${e.uf}"
+                                disabled
+                            >
+
+                        </label>
+                        `
+                        : ""
+                }
+
+                ${campoEndereco(
+                    "Complemento",
+                    "complemento",
+                    "Apartamento, bloco, casa..."
+                )}
+
+                ${campoEndereco(
+                    "Ponto de referência",
+                    "referencia",
+                    "Ex.: próximo ao mercado",
+                    "bandeira"
+                )}
+
             </div>
 
-            <div class="aviso-info">
-                ${icon("info", 18)}
-                <div>
-                    <strong>Importante</strong>
-                    Confira os dados do endereço para evitar atrasos na entrega.
-                </div>
-            </div>
-
-            <button class="botao-principal" onclick="avancarEndereco()">
-                Continuar para taxa de entrega ${icon("seta", 16)}
+            <button
+                class="botao-principal"
+                onclick="avancarEndereco()"
+            >
+                Continuar
+                ${icon("seta", 16)}
             </button>
+
         </main>
 
-        ${bottomNav("")}
+        ${bottomNav()}
     `;
-
 }
 
-// Simula geolocalização: em produção você usaria navigator.geolocation
-// junto de uma API de geocodificação reversa (Google/Mapbox) para
-// preencher os campos automaticamente.
-function usarLocalizacaoAtual() {
+function campoEndereco(
+    titulo,
+    campo,
+    placeholder,
+    icone = null,
+    tipo = "text"
+) {
+    const e = estado.endereco;
 
-    if (!navigator.geolocation) {
+    const input = `
+        <input
+            class="${classeErro(campo)}"
+            type="${tipo}"
+            placeholder="${placeholder}"
+            value="${e[campo] || ""}"
+            oninput="
+                atualizarEndereco(
+                    '${campo}',
+                    this.value
+                )
+            "
+        >
+    `;
 
-        alert("Seu navegador não suporta geolocalização.");
+    return `
+        <label class="full">
 
-        return;
+            ${titulo}
 
-    }
+            ${
+                icone
+                    ? `
+                    <div class="campo-com-icone">
 
-    navigator.geolocation.getCurrentPosition(
+                        <span class="icone-campo">
+                            ${icon(icone, 16)}
+                        </span>
 
-        () => {
+                        ${input}
 
-            alert("Localização obtida! (em produção, aqui preenchemos o endereço automaticamente via API de geocodificação)");
+                    </div>
+                    `
+                    : input
+            }
 
-        },
+            ${mensagemErro(campo)}
 
-        () => {
-
-            alert("Não foi possível obter sua localização. Preencha o endereço manualmente.");
-
-        }
-
-    );
-
+        </label>
+    `;
 }
 
 
 /* =====================================================
-   TAXA DE ENTREGA
+   ENTREGA
 ===================================================== */
 
 function entrega() {
-
-    const total = subtotal() + estado.unidade.taxa;
-
     const e = estado.endereco;
 
-    const enderecoFormatado = `${e.rua}, ${e.numero}${e.complemento ? " - " + e.complemento : ""} · ${e.bairro}` +
-        (e.cidade ? ` · ${e.cidade}/${e.uf}` : "");
+    const enderecoFormatado = `
+        ${e.rua}, ${e.numero}
+        ${e.complemento ? ` - ${e.complemento}` : ""}
+        · ${e.bairro}
+        ${e.cidade ? ` · ${e.cidade}/${e.uf}` : ""}
+    `;
 
     return `
         ${header("endereco")}
         ${etapas(2)}
 
         <main class="container">
-            <h1 class="titulo">Taxa de entrega</h1>
-            <p class="subtitulo">Confira o valor da entrega.</p>
+
+            <h1 class="titulo">
+                Entrega
+            </h1>
+
+            <p class="subtitulo">
+                Confira os dados da sua entrega.
+            </p>
 
             <div class="endereco-card">
-                <div class="icone-pin">${icon("pin", 20)}</div>
-                <div>
-                    <strong>Seu endereço</strong><br>
-                    <small>${enderecoFormatado}</small>
+
+                <div class="icone-pin">
+                    ${icon("pin", 20)}
                 </div>
+
+                <div>
+
+                    <strong>Seu endereço</strong>
+
+                    <br>
+
+                    <small>
+                        ${enderecoFormatado}
+                    </small>
+
+                </div>
+
             </div>
 
             <div class="info-entrega">
-                <div><span>${icon("loja", 16)} Unidade</span><strong>${estado.unidade.nome}</strong></div>
-                <div><span>${icon("pin", 16)} Distância</span><strong>${estado.unidade.distancia}</strong></div>
-                <div><span>${icon("relogio", 16)} Previsão</span><strong>40–60 minutos</strong></div>
-                <div><span>${icon("caminhao", 16)} Taxa de entrega</span><strong>${dinheiro(estado.unidade.taxa)}</strong></div>
+
+                <div>
+                    <span>
+                        ${icon("loja", 16)}
+                        Unidade
+                    </span>
+
+                    <strong>
+                        ${estado.unidade.nome}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>
+                        ${icon("pin", 16)}
+                        Distância
+                    </span>
+
+                    <strong>
+                        ${estado.unidade.distancia}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>
+                        ${icon("relogio", 16)}
+                        Previsão
+                    </span>
+
+                    <strong>
+                        ${CONFIG.entrega.previsao}
+                    </strong>
+                </div>
+
             </div>
 
-            <div class="resumo">
-                <div class="linha"><span>Subtotal</span><span>${dinheiro(subtotal())}</span></div>
-                <div class="linha"><span>Entrega</span><span>${dinheiro(estado.unidade.taxa)}</span></div>
-                <div class="linha total"><span>Total</span><span>${dinheiro(total)}</span></div>
-            </div>
+            ${resumoPedido()}
 
-            <button class="botao-principal" onclick="ir('pagamento')">
-                Continuar para pagamento ${icon("seta", 16)}
+            <button
+                class="botao-principal"
+                onclick="ir('pagamento')"
+            >
+                Continuar para pagamento
+                ${icon("seta", 16)}
             </button>
+
         </main>
 
-        ${bottomNav("")}
+        ${bottomNav()}
     `;
-
 }
 
 
@@ -1303,84 +1490,232 @@ function entrega() {
 ===================================================== */
 
 function pagamento() {
-    const total = subtotal() + estado.unidade.taxa;
-
     const pixAtivo = estado.pagamento === "pix";
 
-    const html = `
+    return `
         ${header("entrega")}
         ${etapas(3)}
 
         <main class="container">
-            <h1 class="titulo">Pagamento</h1>
-            <p class="subtitulo">Escolha como deseja pagar.</p>
 
-            ${estado.erros.pagamento ? `<p class="msg-erro msg-erro-bloco">${icon("info", 16)} ${estado.erros.pagamento}</p>` : ""}
+            <h1 class="titulo">
+                Pagamento
+            </h1>
 
-            <button class="pagamento ${pixAtivo ? "ativo" : ""}"
-                onclick="estado.pagamento='pix'; estado.erros={}; render()">
-                <div class="icone">${icon("diamante", 18)}</div>
-                <div><strong>Pix</strong><small>Pagamento instantâneo</small></div>
-                <span class="radio"></span>
-            </button>
+            <p class="subtitulo">
+                Escolha como deseja pagar.
+            </p>
 
-            <button class="pagamento ${!pixAtivo ? "ativo" : ""}"
-                onclick="estado.pagamento='cartao'; estado.erros={}; render()">
-                <div class="icone">${icon("cartao", 18)}</div>
-                <div><strong>Cartão</strong><small>Crédito ou débito</small></div>
-                <span class="radio"></span>
-            </button>
+            ${
+                estado.erros.pagamento
+                    ? `
+                    <p class="msg-erro msg-erro-bloco">
+                        ${icon("info", 16)}
+                        ${estado.erros.pagamento}
+                    </p>
+                    `
+                    : ""
+            }
 
-            ${pixAtivo ? `
-                <div class="localizacao">
-                    ${icon("escudo", 18)} Ao confirmar, o Mercado Pago gera o QR Code Pix e o pagamento será acompanhado pelo backend.
+            <button
+                class="pagamento ${pixAtivo ? "ativo" : ""}"
+                onclick="
+                    estado.pagamento='pix';
+                    estado.erros={};
+                    render()
+                "
+            >
+                <div class="icone">
+                    ${icon("diamante", 18)}
                 </div>
-            ` : `
-                <div id="cardPaymentBrick_container" style="margin-top:16px"></div>
-                <small class="subtitulo">Os dados do cartão são tratados pelo Mercado Pago. O número completo e o CVV não passam pelo nosso backend.</small>
-            `}
 
-            <div class="resumo">
-                <div class="linha"><span>Subtotal</span><span>${dinheiro(subtotal())}</span></div>
-                <div class="linha"><span>Entrega</span><span>${dinheiro(estado.unidade.taxa)}</span></div>
-                <div class="linha total"><span>Total</span><span>${dinheiro(total)}</span></div>
-            </div>
+                <div>
+                    <strong>Pix</strong>
+                    <small>Pagamento instantâneo</small>
+                </div>
 
-            ${pixAtivo ? `
-                <button class="botao-principal" onclick="finalizarPagamento()">
-                    Gerar Pix e confirmar pedido ${icon("seta", 16)}
-                </button>
-            ` : ""}
+                <span class="radio"></span>
+            </button>
+
+            <button
+                class="pagamento ${!pixAtivo ? "ativo" : ""}"
+                onclick="
+                    estado.pagamento='cartao';
+                    estado.erros={};
+                    render()
+                "
+            >
+                <div class="icone">
+                    ${icon("cartao", 18)}
+                </div>
+
+                <div>
+                    <strong>Cartão</strong>
+                    <small>Crédito ou débito</small>
+                </div>
+
+                <span class="radio"></span>
+            </button>
+
+            ${
+                pixAtivo
+                    ? `
+                    <div class="localizacao">
+                        ${icon("escudo", 18)}
+                        Pagamento seguro via Mercado Pago.
+                    </div>
+
+                    <button
+                        class="botao-principal"
+                        onclick="finalizarPagamento()"
+                    >
+                        Gerar Pix e confirmar pedido
+                        ${icon("seta", 16)}
+                    </button>
+                    `
+                    : `
+                    <div
+                        id="cardPaymentBrick_container"
+                        style="margin-top:16px"
+                    ></div>
+                    `
+            }
+
+            ${resumoPedido()}
+
         </main>
 
-        ${bottomNav("")}
+        ${bottomNav()}
     `;
-
-    setTimeout(() => {
-        if (!pixAtivo) inicializarCardBrick();
-    }, 0);
-
-    return html;
 }
 
+
 /* =====================================================
-   PROCESSANDO PAGAMENTO
+   PIX
 ===================================================== */
 
-function processando() {
+function pixPagamento() {
+    const pix = estado.pix || {};
 
-    const metodo = estado.metodoProcessando === "pix" ? "Pix" : "cartão";
+    const qr = pix.qrCodeBase64
+        ? `
+            <img
+                class="pix-qr"
+                src="data:image/png;base64,${pix.qrCodeBase64}"
+                alt="QR Code Pix"
+            >
+        `
+        : "";
 
     return `
         ${header()}
 
         <main class="container confirmacao">
-            <div class="spinner"></div>
-            <h1>Processando pagamento...</h1>
-            <p class="subtitulo">Estamos confirmando seu pagamento via ${metodo}. Isso pode levar alguns segundos.</p>
+
+            <div class="check">
+                ${icon("check", 40)}
+            </div>
+
+            <h1>
+                Pix gerado!
+            </h1>
+
+            <p class="subtitulo">
+                Pedido ${estado.numeroPedido}.
+                Faça o pagamento pelo QR Code.
+            </p>
+
+            <div class="pedido-card">
+
+                ${qr}
+
+                <p>
+                    ${icon("cartao", 15)}
+                    Valor
+                </p>
+
+                <strong>
+                    ${dinheiro(totalPedido())}
+                </strong>
+
+                ${
+                    pix.qrCode
+                        ? `
+                        <label
+                            style="
+                                display:block;
+                                margin-top:16px;
+                                font-weight:bold
+                            "
+                        >
+
+                            Pix Copia e Cola
+
+                            <textarea
+                                id="pix-copia-cola"
+                                readonly
+                                style="
+                                    width:100%;
+                                    min-height:110px;
+                                    margin-top:8px
+                                "
+                            >${pix.qrCode}</textarea>
+
+                        </label>
+
+                        <button
+                            class="botao-principal"
+                            style="margin-top:10px"
+                            onclick="
+                                navigator.clipboard.writeText(
+                                    document.getElementById(
+                                        'pix-copia-cola'
+                                    ).value
+                                );
+                                alert('Código Pix copiado!')
+                            "
+                        >
+                            Copiar Pix
+                        </button>
+                        `
+                        : ""
+                }
+
+            </div>
+
         </main>
     `;
+}
 
+
+/* =====================================================
+   PROCESSANDO
+===================================================== */
+
+function processando() {
+    const metodo =
+        estado.metodoProcessando === "pix"
+            ? "Pix"
+            : "cartão";
+
+    return `
+        ${header()}
+
+        <main class="container confirmacao">
+
+            <div class="spinner"></div>
+
+            <h1>
+                Processando pagamento...
+            </h1>
+
+            <p class="subtitulo">
+                Estamos confirmando seu pagamento via
+                ${metodo}.
+            </p>
+
+        </main>
+    `;
 }
 
 
@@ -1389,97 +1724,117 @@ function processando() {
 ===================================================== */
 
 function confirmacao() {
-
-    const total = subtotal() + estado.unidade.taxa;
-
     return `
         ${header()}
         ${etapas(4)}
 
         <main class="container confirmacao">
-            <div class="check">${icon("check", 40)}</div>
-            <h1>Pedido confirmado!</h1>
-            <p class="subtitulo">A Polo Norte já recebeu seu pedido.</p>
 
-            <div class="pedido-card">
-                <p>Número do pedido</p>
-                <div class="pedido-numero">${estado.numeroPedido}</div>
-                <hr>
-                <p>${icon("loja", 15)} Unidade</p>
-                <strong>${estado.unidade.nome}</strong>
-                <p>${icon("relogio", 15)} Previsão de entrega</p>
-                <strong>40–60 minutos</strong>
-                <p>${icon("cartao", 15)} Total</p>
-                <strong>${dinheiro(total)}</strong>
+            <div class="check">
+                ${icon("check", 40)}
             </div>
 
-            <button class="botao-principal" onclick="reiniciarPedido()">${icon("caixa", 18)} Acompanhar pedido ${icon("seta", 16)}</button>
+            <h1>
+                Pedido confirmado!
+            </h1>
 
-            <p class="subtitulo">Você também poderá receber atualizações pelo WhatsApp.</p>
+            <p class="subtitulo">
+                A Polo Norte já recebeu seu pedido.
+            </p>
+
+            <div class="pedido-card">
+
+                <p>
+                    Número do pedido
+                </p>
+
+                <div class="pedido-numero">
+                    ${estado.numeroPedido}
+                </div>
+
+                <hr>
+
+                <p>
+                    ${icon("loja", 15)}
+                    Unidade
+                </p>
+
+                <strong>
+                    ${estado.unidade.nome}
+                </strong>
+
+                <p>
+                    ${icon("relogio", 15)}
+                    Previsão de entrega
+                </p>
+
+                <strong>
+                    ${CONFIG.entrega.previsao}
+                </strong>
+
+                <p>
+                    ${icon("cartao", 15)}
+                    Total
+                </p>
+
+                <strong>
+                    ${dinheiro(totalPedido())}
+                </strong>
+
+            </div>
+
+            <button
+                class="botao-principal"
+                onclick="reiniciarPedido()"
+            >
+                ${icon("caixa", 18)}
+                Acompanhar pedido
+                ${icon("seta", 16)}
+            </button>
+
         </main>
     `;
-
 }
 
-// Depois de confirmar, um novo pedido deve começar do carrinho vazio
 function reiniciarPedido() {
-
     estado.carrinho = {};
+    estado.numeroPedido = null;
+    estado.pix = null;
 
-    estado.tela = "menu";
-
-    render();
-
+    ir("menu");
 }
 
 
 /* =====================================================
-   RENDERIZAÇÃO DAS TELAS
+   RENDERIZAÇÃO
 ===================================================== */
+
+const telas = {
+    home,
+    menu,
+    carrinho,
+    endereco,
+    entrega,
+    pagamento,
+    processando,
+    pix: pixPagamento,
+    confirmacao
+};
 
 function render() {
     const app = document.getElementById("app");
 
-    switch (estado.tela) {
-        case "home":
-            app.innerHTML = home();
-            break;
+    if (!app) {
+        console.error(
+            'Elemento com id="app" não encontrado.'
+        );
 
-        case "menu":
-            app.innerHTML = menu();
-            break;
-
-        case "carrinho":
-            app.innerHTML = carrinho();
-            break;
-
-        case "endereco":
-            app.innerHTML = endereco();
-            break;
-
-        case "entrega":
-            app.innerHTML = entrega();
-            break;
-
-        case "pagamento":
-            app.innerHTML = pagamento();
-            break;
-
-        case "processando":
-            app.innerHTML = processando();
-            break;
-
-        case "pix":
-            app.innerHTML = pixPagamento();
-            break;
-
-        case "confirmacao":
-            app.innerHTML = confirmacao();
-            break;
-
-        default:
-            app.innerHTML = home();
+        return;
     }
+
+    const tela = telas[estado.tela] || home;
+
+    app.innerHTML = tela();
 }
 
 
