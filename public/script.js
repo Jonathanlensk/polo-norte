@@ -619,6 +619,8 @@ async function processarPagamento(metodo, dadosCartao = null) {
             payload.pagamento = dadosCartao;
         }
 
+        console.log("ENVIANDO PEDIDO PARA /api/orders", payload);
+        
         const resposta = await fetch("/api/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
