@@ -38,7 +38,7 @@ const products = [
   { id: 7, nome: "Red Label", preco: 89.90 },
   { id: 8, nome: "Tanqueray", preco: 89.90 },
   { id: 9, nome: "Red Bull", preco: 8.90 },
-  { id: 10, nome: "Água Mineral", preco: 2.50 },
+  { id: 10, nome: "Água Mineral", preco: 0,1 },
   { id: 11, nome: "Coca-Cola", preco: 11.90 },
   { id: 12, nome: "Gelo em Cubo", preco: 9.90 }
 ];
