@@ -276,24 +276,55 @@
     O status retornado será APPROVED.
   */
 
-  function getPaymentStatus(mpOrder) {
-    const payment =
-      mpOrder?.transactions?.payments?.[0] || {};
-
-    return {
-      payment,
-
-      status:
-        payment.status ||
-        mpOrder.status ||
-        "pending",
-
-      statusDetail:
-        payment.status_detail ||
-        mpOrder.status_detail ||
-        null
-    };
+  /*
+  TRADUZ O STATUS DA ORDERS API
+  PARA O PADRÃO QUE O RESTO DO APP ESPERA
+  (approved / pending / rejected / cancelled)
+*/
+function normalizeStatus(rawStatus, rawDetail) {
+  if (rawStatus === "processed") {
+    return "approved";
   }
+
+  if (["action_required", "created"].includes(rawStatus)) {
+    return "pending";
+  }
+
+  if (["cancelled", "expired"].includes(rawStatus)) {
+    return "cancelled";
+  }
+
+  if (rawStatus === "rejected") {
+    return "rejected";
+  }
+
+  return rawStatus;
+}
+
+function getPaymentStatus(mpOrder) {
+  const payment =
+    mpOrder?.transactions?.payments?.[0] || {};
+
+  const rawStatus =
+    payment.status ||
+    mpOrder.status ||
+    "pending";
+
+  const rawDetail =
+    payment.status_detail ||
+    mpOrder.status_detail ||
+    null;
+
+  return {
+    payment,
+
+    status:
+      normalizeStatus(rawStatus, rawDetail),
+
+    statusDetail:
+      rawDetail
+  };
+}
 
   /*
     HEALTH CHECK
