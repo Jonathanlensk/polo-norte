@@ -481,13 +481,13 @@ function header(voltar = null) {
                 ${icon(voltar ? "voltar" : "menu", 20)}
             </button>
 
-            <div class="logo">
-                <img
-                    src="logo-polo-norte.png"
-                    alt="Polo Norte Bebidas"
-                    class="logo-img logo-img-header"
-                >
-            </div>
+            <div class="logo" onclick="ir('home')" style="cursor:pointer">
+    <img
+        src="logo-polo-norte.png"
+        alt="Polo Norte Bebidas"
+        class="logo-img logo-img-header"
+    >
+</div>
 
             <button
                 class="header-btn header-cart"
@@ -545,33 +545,37 @@ function etapas(atual) {
 
 function bottomNav(ativo = "") {
     const itens = [
-        {
-            id: "home",
-            nome: "Início",
-            icone: "casa",
-            tela: "home"
-        },
-        {
-            id: "pedidos",
-            nome: "Pedidos",
-            icone: "caixa"
-        },
-        {
-            id: "favoritos",
-            nome: "Favoritos",
-            icone: "coracao"
-        },
-        {
-            id: "perfil",
-            nome: "Perfil",
-            icone: "usuario"
-        },
-        {
-            id: "mais",
-            nome: "Mais",
-            icone: "menu"
-        }
-    ];
+    {
+        id: "home",
+        nome: "Início",
+        icone: "casa",
+        tela: "home"
+    },
+    {
+        id: "pedidos",
+        nome: "Pedidos",
+        icone: "caixa",
+        tela: "pedidos"
+    },
+    {
+        id: "favoritos",
+        nome: "Favoritos",
+        icone: "coracao",
+        tela: "favoritos"
+    },
+    {
+        id: "perfil",
+        nome: "Perfil",
+        icone: "usuario",
+        tela: "perfil"
+    },
+    {
+        id: "mais",
+        nome: "Mais",
+        icone: "menu",
+        tela: "mais"
+    }
+];
 
     return `
         <nav class="bottom-nav">
@@ -1925,6 +1929,30 @@ function confirmacao() {
 
         </main>
     `;
+}
+function confirmacao() {
+    return `
+        
+    `;
+}
+
+function pedidosTela() {
+    return `
+        ${header("home")}
+        
+    `;
+}
+
+function favoritosTela() {
+    
+}
+
+function perfilTela() {
+    
+}
+
+function maisTela() {
+    
 }
 
 function reiniciarPedido() {
