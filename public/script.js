@@ -483,7 +483,7 @@ function header(voltar = null) {
 
             <div class="logo" onclick="ir('home')" style="cursor:pointer">
     <img
-        src="logo-polo-norte.png"
+        src="LOGO-POLO-NORTE.png"
         alt="Polo Norte Bebidas"
         class="logo-img logo-img-header"
     >
@@ -606,7 +606,7 @@ function home() {
 
             <div class="logo">
                 <img
-                    src="logo-polo-norte.png"
+                    src="LOGO-POLO-NORTE.png"
                     alt="Polo Norte Bebidas"
                     class="logo-img logo-img-hero"
                 >
