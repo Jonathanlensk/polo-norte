@@ -4,7 +4,6 @@ const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const fs = require("fs");
 const { randomUUID } = require("crypto");
 
 const app = express();
@@ -14,38 +13,264 @@ const MP_API = "https://api.mercadopago.com";
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// =========================
-// BANCO DE DADOS LOCAL
-// =========================
-
-const dataDir = path.join(__dirname, "data");
-const ordersFile = path.join(dataDir, "orders.json");
-
-fs.mkdirSync(dataDir, { recursive: true });
-
-if (!fs.existsSync(ordersFile)) {
-  fs.writeFileSync(ordersFile, "[]", "utf8");
-}
-
-const readOrders = () =>
-  JSON.parse(fs.readFileSync(ordersFile, "utf8"));
-
-const writeOrders = (orders) =>
-  fs.writeFileSync(
-    ordersFile,
-    JSON.stringify(orders, null, 2),
-    "utf8"
-  );
-
-const findOrder = (id) =>
-  readOrders().find(
-    (order) =>
-      String(order.mercadoPagoOrderId) === String(id)
-  );
-
 const money = (value) =>
   Number(Number(value).toFixed(2));
 
+// =========================
+// PEDIDOS - POSTGRESQL
+// =========================
+
+async function findOrder(orderId) {
+  const result = await db.query(
+    `
+      SELECT
+        id,
+        order_number AS "orderNumber",
+        mercado_pago_order_id AS "mercadoPagoOrderId",
+        mercado_pago_payment_id AS "mercadoPagoPaymentId",
+        payment_status AS status,
+        payment_status_detail AS "statusDetail",
+        test_approved AS "testApproved"
+      FROM orders
+      WHERE mercado_pago_order_id = $1
+      LIMIT 1
+    `,
+    [String(orderId)]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function updateLocalOrder(
+  orderId,
+  payment,
+  status,
+  statusDetail
+) {
+  const paymentId =
+    payment?.id != null
+      ? String(payment.id)
+      : null;
+
+  const result = await db.query(
+    `
+      UPDATE orders
+      SET
+        payment_status = $2,
+        payment_status_detail = $3,
+        mercado_pago_payment_id =
+          COALESCE($4, mercado_pago_payment_id),
+        updated_at = NOW()
+      WHERE mercado_pago_order_id = $1
+      RETURNING
+        id,
+        order_number AS "orderNumber",
+        mercado_pago_order_id AS "mercadoPagoOrderId",
+        mercado_pago_payment_id AS "mercadoPagoPaymentId",
+        payment_status AS status,
+        payment_status_detail AS "statusDetail",
+        test_approved AS "testApproved"
+    `,
+    [
+      String(orderId),
+      status,
+      statusDetail || null,
+      paymentId
+    ]
+  );
+
+  const order = result.rows[0];
+
+  if (!order) {
+    return null;
+  }
+
+  await db.query(
+    `
+      UPDATE payments
+      SET
+        external_payment_id =
+          COALESCE($2, external_payment_id),
+        status = $3,
+
+        approved_at =
+      CASE
+        WHEN $3::text = 'approved'
+        THEN COALESCE(approved_at, NOW())
+        ELSE approved_at
+       END,
+        updated_at = NOW()
+
+      WHERE order_id = $1
+    `,
+    [
+      order.id,
+      paymentId,
+      status
+    ]
+  );
+
+  return order;
+}
+
+async function saveOrderToDatabase({
+  orderNumber,
+  mpOrder,
+  payment,
+  status,
+  statusDetail,
+  metodo,
+  endereco,
+  cart
+}) {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const deliveryAddress = [
+      `${endereco.rua}, ${endereco.numero}`,
+      endereco.complemento
+        ? ` - ${endereco.complemento}`
+        : "",
+      ` - ${endereco.bairro}`,
+      endereco.cidade
+        ? ` - ${endereco.cidade}${endereco.uf ? `/${endereco.uf}` : ""}`
+        : "",
+      endereco.cep
+        ? ` - CEP ${endereco.cep}`
+        : ""
+    ].join("");
+
+    const paymentId =
+      payment?.id != null
+        ? String(payment.id)
+        : null;
+
+    const orderResult =
+      await client.query(
+        `
+          INSERT INTO orders (
+            order_number,
+            customer_name,
+            customer_phone,
+            customer_email,
+            delivery_address,
+            delivery_reference,
+            delivery_fee,
+            subtotal,
+            total,
+            payment_method,
+            payment_status,
+            payment_status_detail,
+            order_status,
+            mercado_pago_order_id,
+            mercado_pago_payment_id
+          )
+          VALUES (
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15
+          )
+          RETURNING id
+        `,
+        [
+          orderNumber,
+          endereco.nome,
+          endereco.whatsapp,
+          endereco.email || null,
+          deliveryAddress,
+          endereco.referencia || null,
+          cart.entrega,
+          cart.subtotal,
+          cart.total,
+          metodo,
+          status,
+          statusDetail || null,
+          "received",
+          String(mpOrder.id),
+          paymentId
+        ]
+      );
+
+    const databaseOrderId =
+      orderResult.rows[0].id;
+
+    for (const item of cart.itens) {
+      await client.query(
+        `
+          INSERT INTO order_items (
+            order_id,
+            product_id,
+            product_name,
+            unit_price,
+            quantity,
+            subtotal
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          databaseOrderId,
+          item.id,
+          item.nome,
+          item.precoUnitario,
+          item.quantidade,
+          money(
+            item.precoUnitario *
+            item.quantidade
+          )
+        ]
+      );
+    }
+
+  const approvedAt =
+  status === "approved"
+    ? new Date()
+    : null;
+
+await client.query(
+  `
+    INSERT INTO payments (
+      order_id,
+      provider,
+      external_payment_id,
+      payment_method,
+      status,
+      amount,
+      approved_at
+    )
+    VALUES (
+      $1,
+      'mercado_pago',
+      $2,
+      $3,
+      $4,
+      $5,
+      $6
+    )
+  `,
+  [
+    databaseOrderId,
+    paymentId,
+    metodo,
+    status,
+    cart.total,
+    approvedAt
+  ]
+);
+
+    await client.query("COMMIT");
+
+    return databaseOrderId;
+
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+
+  } finally {
+    client.release();
+  }
+}
 const units = {
   julio: {
     nome: "Júlio de Mesquita",
@@ -269,31 +494,83 @@ async function getMpOrder(orderId) {
   );
 }
 
-function updateLocalOrder(orderId, payment, status, statusDetail) {
-  const orders = readOrders();
+async function updateLocalOrder(
+  orderId,
+  payment,
+  status,
+  statusDetail
+) {
+  const paymentId =
+    payment?.id != null
+      ? String(payment.id)
+      : null;
 
-  const local = orders.find(
-    (order) =>
-      String(order.mercadoPagoOrderId) ===
-      String(orderId)
+  const approvedAt =
+    status === "approved"
+      ? new Date()
+      : null;
+
+  // Atualiza o pedido
+  const result = await db.query(
+    `
+      UPDATE orders
+      SET
+        payment_status = $2,
+        payment_status_detail = $3,
+        mercado_pago_payment_id =
+          COALESCE($4, mercado_pago_payment_id),
+        updated_at = NOW()
+      WHERE mercado_pago_order_id = $1
+      RETURNING
+        id,
+        order_number AS "orderNumber",
+        mercado_pago_order_id AS "mercadoPagoOrderId",
+        mercado_pago_payment_id AS "mercadoPagoPaymentId",
+        payment_status AS status,
+        payment_status_detail AS "statusDetail",
+        test_approved AS "testApproved"
+    `,
+    [
+      String(orderId),
+      String(status),
+      statusDetail ? String(statusDetail) : null,
+      paymentId
+    ]
   );
 
-  if (!local) return null;
+  const order = result.rows[0];
 
-  local.status = status;
-  local.statusDetail = statusDetail;
-  local.mercadoPagoPaymentId =
-    payment.id ||
-    local.mercadoPagoPaymentId;
+  if (!order) {
+    return null;
+  }
 
-  local.updatedAt =
-    new Date().toISOString();
+  // Atualiza o pagamento
+  await db.query(
+    `
+      UPDATE payments
+      SET
+        external_payment_id =
+          COALESCE($2, external_payment_id),
 
-  writeOrders(orders);
+        status = $3,
 
-  return local;
+        approved_at =
+          COALESCE($4, approved_at),
+
+        updated_at = NOW()
+
+      WHERE order_id = $1
+    `,
+    [
+      order.id,
+      paymentId,
+      String(status),
+      approvedAt
+    ]
+  );
+
+  return order;
 }
-
 
 // =========================
 // HEALTH
@@ -513,60 +790,16 @@ app.post("/api/orders", async (req, res) => {
       statusDetail
     } = getPaymentStatus(mpOrder);
 
-    const localOrder = {
-      orderNumber,
-
-      externalReference:
-        orderNumber,
-
-      mercadoPagoOrderId:
-        mpOrder.id,
-
-      mercadoPagoPaymentId:
-        payment.id || null,
-
-      status,
-      statusDetail,
-
-      paymentMethod:
-        metodo,
-
-      unidade:
-        unidadeId,
-
-      cliente: {
-        nome: endereco.nome,
-        email: endereco.email,
-        whatsapp: endereco.whatsapp
-      },
-
-      endereco: {
-        cep: endereco.cep,
-        rua: endereco.rua,
-        numero: endereco.numero,
-        bairro: endereco.bairro,
-        cidade: endereco.cidade || "",
-        uf: endereco.uf || "",
-        complemento:
-          endereco.complemento || "",
-        referencia:
-          endereco.referencia || ""
-      },
-
-      itens: cart.itens,
-      subtotal: cart.subtotal,
-      entrega: cart.entrega,
-      total: cart.total,
-
-      createdAt:
-        new Date().toISOString()
-    };
-
-    const orders = readOrders();
-
-    orders.push(localOrder);
-
-    writeOrders(orders);
+await saveOrderToDatabase({
+  orderNumber,
+  mpOrder,
+  payment,
+  status,
+  statusDetail,
+  metodo,
+  endereco,
+  cart
+});
 
     const mpMethod =
       payment.payment_method || {};
@@ -622,7 +855,7 @@ app.post("/api/orders", async (req, res) => {
 app.get("/api/orders/:id", async (req, res) => {
   try {
     const local =
-      findOrder(req.params.id);
+  await findOrder(req.params.id);
 
     // Pagamento simulado
     if (local?.testApproved) {
@@ -654,7 +887,7 @@ app.get("/api/orders/:id", async (req, res) => {
     } = getPaymentStatus(mpOrder);
 
     const updated =
-      updateLocalOrder(
+  await updateLocalOrder(
         req.params.id,
         payment,
         status,
@@ -718,7 +951,7 @@ app.post(
       } = getPaymentStatus(mpOrder);
 
       const local =
-        updateLocalOrder(
+  await updateLocalOrder( 
           orderId,
           payment,
           status,
@@ -748,60 +981,76 @@ app.post(
 
 
 // =========================
-// TESTE
+// TESTE - APROVAR PIX
 // =========================
 
 app.post(
   "/api/test/approve/:id",
-  (req, res) => {
+  async (req, res) => {
     try {
-      const orders = readOrders();
+      const orderId = String(req.params.id);
 
-      const local = orders.find(
-        (order) =>
-          String(
-            order.mercadoPagoOrderId
-          ) ===
-          String(req.params.id)
+      const result = await db.query(
+        `
+          UPDATE orders
+          SET
+            payment_status = 'approved',
+            payment_status_detail = 'accredited',
+            test_approved = TRUE,
+            updated_at = NOW()
+          WHERE mercado_pago_order_id = $1
+          RETURNING
+            id,
+            order_number,
+            mercado_pago_order_id,
+            mercado_pago_payment_id
+        `,
+        [orderId]
       );
 
-      if (!local) {
+      const order = result.rows[0];
+
+      if (!order) {
         return res.status(404).json({
-          message:
-            "Pedido não encontrado."
+          message: "Pedido não encontrado."
         });
       }
 
-      local.status = "approved";
-
-      local.statusDetail =
-        "accredited";
-
-      local.testApproved = true;
-
-      local.updatedAt =
-        new Date().toISOString();
-
-      writeOrders(orders);
+      await db.query(
+        `
+          UPDATE payments
+          SET
+            status = 'approved',
+            approved_at = COALESCE(
+              approved_at,
+              NOW()
+            ),
+            updated_at = NOW()
+          WHERE order_id = $1
+        `,
+        [order.id]
+      );
 
       console.log(
         "PAGAMENTO SIMULADO COMO APROVADO:",
-        local.orderNumber
+        order.order_number
       );
 
       res.json({
         ok: true,
 
         orderId:
-          local.mercadoPagoOrderId,
+          order.mercado_pago_order_id,
+
+        paymentId:
+          order.mercado_pago_payment_id,
 
         orderNumber:
-          local.orderNumber,
+          order.order_number,
 
         status: "approved",
 
-        statusDetail:
-          "accredited"
+        statusDetail: "accredited"
       });
 
     } catch (error) {
