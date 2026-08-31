@@ -1,7 +1,8 @@
 const CONFIG = {
     api: {
         orders: "/api/orders",
-        config: "/api/config"
+        config: "/api/config",
+        products: "/api/products"
     },
 
     entrega: {
@@ -110,23 +111,59 @@ function classeCategoria(categoria) {
     return classesCategoria[categoria] || "cat-cervejas";
 }
 
-const produtos = [
-    { id: 1, nome: "Heineken", detalhe: "Long Neck 330ml", categoria: "Cervejas", preco: 6.60, precoOriginal: 7.50, emoji: "🍺" },
-    { id: 2, nome: "Brahma", detalhe: "Long Neck 330ml", categoria: "Cervejas", preco: 5.50, emoji: "🍺" },
-    { id: 3, nome: "Corona Extra", detalhe: "Long Neck 330ml", categoria: "Cervejas", preco: 5.50, emoji: "🍺" },
-    { id: 4, nome: "Budweiser", detalhe: "Long Neck 330ml", categoria: "Cervejas", preco: 6.50, emoji: "🍺" },
-    { id: 5, nome: "Smirnoff", detalhe: "Vodka 998ml", categoria: "Destilados", preco: 49.90, emoji: "🥃" },
-    { id: 6, nome: "Jack Daniel's", detalhe: "Whisky 700ml", categoria: "Destilados", preco: 139.90, emoji: "🥃" },
-    { id: 7, nome: "Red Label", detalhe: "Whisky 1L", categoria: "Destilados", preco: 89.90, emoji: "🥃" },
-    { id: 8, nome: "Tanqueray", detalhe: "London Dry 750ml", categoria: "Destilados", preco: 89.90, emoji: "🍸" },
-    { id: 9, nome: "Red Bull", detalhe: "Lata 250ml", categoria: "Energéticos", preco: 8.90, emoji: "⚡" },
+let produtos = [];
 
-    // ÁGUA ALTERADA PARA R$ 0,10
-    { id: 10, nome: "Água Mineral", detalhe: "500ml", categoria: "Águas", preco: 0.10, emoji: "💧" },
+function emojiProduto(categoria) {
+    const emojis = {
+        Cervejas: "🍺",
+        Destilados: "🥃",
+        Vinhos: "🍷",
+        Refrigerantes: "🥤",
+        Energéticos: "⚡",
+        Águas: "💧",
+        Gelo: "🧊"
+    };
 
-    { id: 11, nome: "Coca-Cola", detalhe: "2 Litros", categoria: "Refrigerantes", preco: 11.90, emoji: "🥤" },
-    { id: 12, nome: "Gelo em Cubo", detalhe: "Pacote 5kg", categoria: "Gelo", preco: 9.90, emoji: "🧊" }
-];
+    return emojis[categoria] || "🥤";
+}
+
+async function carregarProdutos() {
+    try {
+        const resposta = await fetch(CONFIG.api.products);
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Não foi possível carregar os produtos."
+            );
+        }
+
+        produtos = resultado.products.map(produto => ({
+            ...produto,
+
+            id: Number(produto.id),
+            preco: Number(produto.preco),
+            estoque: Number(produto.estoque),
+
+            emoji: emojiProduto(produto.categoria)
+        }));
+
+        console.log(
+            "PRODUTOS CARREGADOS DO BANCO:",
+            produtos
+        );
+
+    } catch (erro) {
+        console.error(
+            "Erro ao carregar produtos:",
+            erro
+        );
+
+        produtos = [];
+    }
+}
 
 const estado = {
     tela: "home",
@@ -1986,4 +2023,9 @@ function render() {
     app.innerHTML = tela();
 }
 
-render();
+async function iniciarApp() {
+    await carregarProdutos();
+    render();
+}
+
+iniciarApp();

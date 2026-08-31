@@ -46,26 +46,6 @@ const findOrder = (id) =>
 const money = (value) =>
   Number(Number(value).toFixed(2));
 
-
-// =========================
-// PRODUTOS
-// =========================
-
-const products = [
-  { id: 1, nome: "Heineken", preco: 6.6 },
-  { id: 2, nome: "Brahma", preco: 5.5 },
-  { id: 3, nome: "Corona Extra", preco: 5.5 },
-  { id: 4, nome: "Budweiser", preco: 6.5 },
-  { id: 5, nome: "Smirnoff", preco: 49.9 },
-  { id: 6, nome: "Jack Daniel's", preco: 139.9 },
-  { id: 7, nome: "Red Label", preco: 89.9 },
-  { id: 8, nome: "Tanqueray", preco: 89.9 },
-  { id: 9, nome: "Red Bull", preco: 8.9 },
-  { id: 10, nome: "Água Mineral", preco: 0.1 },
-  { id: 11, nome: "Coca-Cola", preco: 11.9 },
-  { id: 12, nome: "Gelo em Cubo", preco: 9.9 }
-];
-
 const units = {
   julio: {
     nome: "Júlio de Mesquita",
@@ -88,7 +68,7 @@ const units = {
 // CARRINHO
 // =========================
 
-function calculateCart(items, unitId) {
+async function calculateCart(items, unitId) {
   if (!Array.isArray(items) || !items.length) {
     throw new Error("Carrinho vazio.");
   }
@@ -99,17 +79,47 @@ function calculateCart(items, unitId) {
     throw new Error("Unidade inválida.");
   }
 
+  const ids = items.map((item) => Number(item.id));
+
+  if (ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new Error("Produto inválido no carrinho.");
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        id,
+        name,
+        price::float AS price,
+        stock_quantity,
+        active
+      FROM products
+      WHERE id = ANY($1::bigint[])
+        AND active = TRUE
+    `,
+    [ids]
+  );
+
+  const productsById = new Map(
+    result.rows.map((product) => [
+      Number(product.id),
+      product
+    ])
+  );
+
   let subtotal = 0;
 
   const itens = items.map((item) => {
-    const product = products.find(
-      (p) => p.id === Number(item.id)
+    const product = productsById.get(
+      Number(item.id)
     );
 
     const quantidade = Number(item.quantidade);
 
     if (!product) {
-      throw new Error(`Produto inválido: ${item.id}`);
+      throw new Error(
+        `Produto indisponível: ${item.id}`
+      );
     }
 
     if (
@@ -118,17 +128,23 @@ function calculateCart(items, unitId) {
       quantidade > 99
     ) {
       throw new Error(
-        `Quantidade inválida para ${product.nome}.`
+        `Quantidade inválida para ${product.name}.`
       );
     }
 
-    subtotal += product.preco * quantidade;
+    if (quantidade > product.stock_quantity) {
+      throw new Error(
+        `Estoque insuficiente para ${product.name}. Disponível: ${product.stock_quantity}.`
+      );
+    }
+
+    subtotal += product.price * quantidade;
 
     return {
-      id: product.id,
-      nome: product.nome,
+      id: Number(product.id),
+      nome: product.name,
       quantidade,
-      precoUnitario: product.preco
+      precoUnitario: product.price
     };
   });
 
@@ -331,6 +347,42 @@ app.get("/api/config", (req, res) => {
   });
 });
 
+// =========================
+// PRODUTOS - POSTGRESQL
+// =========================
+
+app.get("/api/products", async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT
+        id,
+        name AS nome,
+        description AS detalhe,
+        category AS categoria,
+        price::float AS preco,
+        stock_quantity AS estoque,
+        image_url AS imagem,
+        active AS ativo
+      FROM products
+      WHERE active = TRUE
+      ORDER BY id
+    `);
+
+    res.json({
+      ok: true,
+      products: result.rows
+    });
+
+  } catch (error) {
+    console.error("GET /api/products:", error);
+
+    res.status(500).json({
+      ok: false,
+      message: "Erro ao buscar produtos."
+    });
+  }
+});
+
 
 // =========================
 // CRIAR PEDIDO
@@ -375,7 +427,7 @@ app.post("/api/orders", async (req, res) => {
     }
 
     const cart =
-      calculateCart(itens, unidadeId);
+       await calculateCart(itens, unidadeId);
 
     const orderNumber =
       `PN-${Date.now().toString().slice(-8)}`;
