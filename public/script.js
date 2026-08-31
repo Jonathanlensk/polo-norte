@@ -1930,11 +1930,6 @@ function confirmacao() {
         </main>
     `;
 }
-function confirmacao() {
-    return `
-        
-    `;
-}
 
 function pedidosTela() {
     return `
