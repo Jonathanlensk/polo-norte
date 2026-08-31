@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -282,15 +283,40 @@ function updateLocalOrder(orderId, payment, status, statusDetail) {
 // HEALTH
 // =========================
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "Polo Norte Bebidas API",
+app.get("/api/health", async (req, res) => {
+  try {
+    const result = await db.query(
+      "SELECT NOW() AS database_time"
+    );
 
-    mercadoPagoConfigured: Boolean(
-      process.env.MERCADO_PAGO_ACCESS_TOKEN
-    )
-  });
+    res.json({
+      ok: true,
+      service: "Polo Norte Bebidas API",
+
+      database: {
+        connected: true,
+        time: result.rows[0].database_time
+      },
+
+      mercadoPagoConfigured: Boolean(
+        process.env.MERCADO_PAGO_ACCESS_TOKEN
+      )
+    });
+
+  } catch (error) {
+    console.error("Erro PostgreSQL:", error);
+
+    res.status(500).json({
+      ok: false,
+      service: "Polo Norte Bebidas API",
+
+      database: {
+        connected: false
+      },
+
+      message: "Não foi possível conectar ao PostgreSQL."
+    });
+  }
 });
 
 
