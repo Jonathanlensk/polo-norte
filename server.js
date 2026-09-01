@@ -6,12 +6,95 @@ const cors = require("cors");
 const path = require("path");
 const { randomUUID } = require("crypto");
 
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const MP_API = "https://api.mercadopago.com";
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
+
+// =========================
+// AUTENTICAÇÃO DO CLIENTE
+// =========================
+
+const AUTH_COOKIE = "polo_norte_token";
+
+function criarTokenCliente(clienteId) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET não configurado.");
+  }
+
+  return jwt.sign(
+    {
+      tipo: "cliente"
+    },
+    process.env.JWT_SECRET,
+    {
+      subject: String(clienteId),
+      expiresIn: "30d"
+    }
+  );
+}
+
+function salvarCookieLogin(res, token) {
+  res.cookie(
+    AUTH_COOKIE,
+    token,
+    {
+      httpOnly: true,
+      sameSite: "lax",
+
+      secure:
+        process.env.NODE_ENV === "production",
+
+      maxAge:
+        30 * 24 * 60 * 60 * 1000,
+
+      path: "/"
+    }
+  );
+}
+
+function autenticarCliente(req, res, next) {
+  try {
+    const token =
+      req.cookies?.[AUTH_COOKIE];
+
+    if (!token) {
+      return res.status(401).json({
+        ok: false,
+        message: "Cliente não autenticado."
+      });
+    }
+
+    const dados = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    if (dados.tipo !== "cliente") {
+      return res.status(401).json({
+        ok: false,
+        message: "Sessão inválida."
+      });
+    }
+
+    req.customerId = dados.sub;
+
+    next();
+
+  } catch (error) {
+    return res.status(401).json({
+      ok: false,
+      message: "Sessão inválida ou expirada."
+    });
+  }
+}
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -39,78 +122,6 @@ async function findOrder(orderId) {
   );
 
   return result.rows[0] || null;
-}
-
-async function updateLocalOrder(
-  orderId,
-  payment,
-  status,
-  statusDetail
-) {
-  const paymentId =
-    payment?.id != null
-      ? String(payment.id)
-      : null;
-
-  const result = await db.query(
-    `
-      UPDATE orders
-      SET
-        payment_status = $2,
-        payment_status_detail = $3,
-        mercado_pago_payment_id =
-          COALESCE($4, mercado_pago_payment_id),
-        updated_at = NOW()
-      WHERE mercado_pago_order_id = $1
-      RETURNING
-        id,
-        order_number AS "orderNumber",
-        mercado_pago_order_id AS "mercadoPagoOrderId",
-        mercado_pago_payment_id AS "mercadoPagoPaymentId",
-        payment_status AS status,
-        payment_status_detail AS "statusDetail",
-        test_approved AS "testApproved"
-    `,
-    [
-      String(orderId),
-      status,
-      statusDetail || null,
-      paymentId
-    ]
-  );
-
-  const order = result.rows[0];
-
-  if (!order) {
-    return null;
-  }
-
-  await db.query(
-    `
-      UPDATE payments
-      SET
-        external_payment_id =
-          COALESCE($2, external_payment_id),
-        status = $3,
-
-        approved_at =
-      CASE
-        WHEN $3::text = 'approved'
-        THEN COALESCE(approved_at, NOW())
-        ELSE approved_at
-       END,
-        updated_at = NOW()
-
-      WHERE order_id = $1
-    `,
-    [
-      order.id,
-      paymentId,
-      status
-    ]
-  );
-
-  return order;
 }
 
 async function saveOrderToDatabase({
@@ -624,6 +635,1013 @@ app.get("/api/config", (req, res) => {
   });
 });
 
+// =========================
+// CADASTRO DO CLIENTE
+// =========================
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const {
+      nome,
+      email,
+      whatsapp,
+      senha
+    } = req.body;
+
+    const nomeLimpo =
+      String(nome || "").trim();
+
+    const emailLimpo =
+      String(email || "")
+        .trim()
+        .toLowerCase();
+
+    const telefoneLimpo =
+      String(whatsapp || "")
+        .replace(/\D/g, "");
+
+    const senhaLimpa =
+      String(senha || "");
+
+    if (nomeLimpo.length < 2) {
+      return res.status(400).json({
+        message: "Informe seu nome."
+      });
+    }
+
+    if (
+      !/^\S+@\S+\.\S+$/.test(emailLimpo)
+    ) {
+      return res.status(400).json({
+        message: "Informe um e-mail válido."
+      });
+    }
+
+    if (
+      telefoneLimpo.length < 10 ||
+      telefoneLimpo.length > 11
+    ) {
+      return res.status(400).json({
+        message: "Informe um WhatsApp válido."
+      });
+    }
+
+    if (senhaLimpa.length < 8) {
+      return res.status(400).json({
+        message:
+          "A senha deve ter pelo menos 8 caracteres."
+      });
+    }
+
+    const existente =
+      await db.query(
+        `
+          SELECT id
+          FROM customers
+          WHERE LOWER(email) = LOWER($1)
+          LIMIT 1
+        `,
+        [emailLimpo]
+      );
+
+    if (existente.rows.length) {
+      return res.status(409).json({
+        message:
+          "Já existe uma conta com este e-mail."
+      });
+    }
+
+    const passwordHash =
+      await bcrypt.hash(
+        senhaLimpa,
+        12
+      );
+
+    const resultado =
+      await db.query(
+        `
+          INSERT INTO customers (
+            name,
+            email,
+            phone,
+            password_hash
+          )
+          VALUES ($1, $2, $3, $4)
+
+          RETURNING
+            id,
+            name,
+            email,
+            phone
+        `,
+        [
+          nomeLimpo,
+          emailLimpo,
+          telefoneLimpo,
+          passwordHash
+        ]
+      );
+
+    const cliente =
+      resultado.rows[0];
+
+    const token =
+      criarTokenCliente(cliente.id);
+
+    salvarCookieLogin(
+      res,
+      token
+    );
+
+    return res.status(201).json({
+      ok: true,
+
+      cliente: {
+        id: cliente.id,
+        nome: cliente.name,
+        email: cliente.email,
+        whatsapp: cliente.phone
+      }
+    });
+
+  } catch (error) {
+    console.error(
+      "POST /api/auth/register:",
+      error
+    );
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        message:
+          "Já existe uma conta com este e-mail."
+      });
+    }
+
+    return res.status(500).json({
+      message:
+        "Erro ao criar conta."
+    });
+  }
+});
+
+
+// =========================
+// LOGIN
+// =========================
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const email =
+      String(req.body?.email || "")
+        .trim()
+        .toLowerCase();
+
+    const senha =
+      String(req.body?.senha || "");
+
+    if (!email || !senha) {
+      return res.status(400).json({
+        message:
+          "Informe e-mail e senha."
+      });
+    }
+
+    const resultado =
+      await db.query(
+        `
+          SELECT
+            id,
+            name,
+            email,
+            phone,
+            password_hash,
+            active
+          FROM customers
+          WHERE LOWER(email) = LOWER($1)
+          LIMIT 1
+        `,
+        [email]
+      );
+
+    const cliente =
+      resultado.rows[0];
+
+    if (!cliente) {
+      return res.status(401).json({
+        message:
+          "E-mail ou senha incorretos."
+      });
+    }
+
+    if (!cliente.active) {
+      return res.status(403).json({
+        message:
+          "Esta conta está desativada."
+      });
+    }
+
+    const senhaCorreta =
+      await bcrypt.compare(
+        senha,
+        cliente.password_hash
+      );
+
+    if (!senhaCorreta) {
+      return res.status(401).json({
+        message:
+          "E-mail ou senha incorretos."
+      });
+    }
+
+    const token =
+      criarTokenCliente(cliente.id);
+
+    salvarCookieLogin(
+      res,
+      token
+    );
+
+    return res.json({
+      ok: true,
+
+      cliente: {
+        id: cliente.id,
+        nome: cliente.name,
+        email: cliente.email,
+        whatsapp: cliente.phone
+      }
+    });
+
+  } catch (error) {
+    console.error(
+      "POST /api/auth/login:",
+      error
+    );
+
+    return res.status(500).json({
+      message:
+        "Erro ao entrar na conta."
+    });
+  }
+});
+
+
+// =========================
+// CLIENTE LOGADO
+// =========================
+
+app.get(
+  "/api/auth/me",
+  autenticarCliente,
+  async (req, res) => {
+    try {
+      const resultado =
+        await db.query(
+          `
+            SELECT
+              id,
+              name,
+              email,
+              phone
+            FROM customers
+            WHERE id = $1
+              AND active = TRUE
+            LIMIT 1
+          `,
+          [req.customerId]
+        );
+
+      const cliente =
+        resultado.rows[0];
+
+      if (!cliente) {
+        return res.status(404).json({
+          message:
+            "Cliente não encontrado."
+        });
+      }
+
+      return res.json({
+        ok: true,
+
+        cliente: {
+          id: cliente.id,
+          nome: cliente.name,
+          email: cliente.email,
+          whatsapp: cliente.phone
+        }
+      });
+
+    } catch (error) {
+      console.error(
+        "GET /api/auth/me:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao carregar cliente."
+      });
+    }
+  }
+);
+
+
+// =========================
+// LOGOUT
+// =========================
+
+app.post("/api/auth/logout", (req, res) => {
+
+  res.clearCookie(
+    AUTH_COOKIE,
+    {
+      httpOnly: true,
+      sameSite: "lax",
+
+      secure:
+        process.env.NODE_ENV === "production",
+
+      path: "/"
+    }
+  );
+
+  return res.json({
+    ok: true,
+    message: "Logout realizado."
+  });
+});
+
+// =========================
+// ENDEREÇO DO CLIENTE
+// =========================
+
+app.get(
+  "/api/customer/address",
+  autenticarCliente,
+  async (req, res) => {
+    try {
+      const resultado = await db.query(
+        `
+          SELECT
+            id,
+            recipient_name,
+            zip_code,
+            street,
+            number,
+            complement,
+            neighborhood,
+            city,
+            state,
+            reference
+          FROM customer_addresses
+          WHERE customer_id = $1
+            AND active = TRUE
+          ORDER BY is_default DESC, id DESC
+          LIMIT 1
+        `,
+        [req.customerId]
+      );
+
+      return res.json({
+        ok: true,
+        endereco: resultado.rows[0] || null
+      });
+
+    } catch (error) {
+      console.error(
+        "GET /api/customer/address:",
+        error
+      );
+
+      return res.status(500).json({
+        message: "Erro ao carregar endereço."
+      });
+    }
+  }
+);
+
+
+app.post(
+  "/api/customer/address",
+  autenticarCliente,
+  async (req, res) => {
+    try {
+      const {
+        nome,
+        cep,
+        rua,
+        numero,
+        bairro,
+        cidade,
+        uf,
+        complemento,
+        referencia
+      } = req.body;
+
+      if (
+        !nome ||
+        !cep ||
+        !rua ||
+        !numero ||
+        !bairro
+      ) {
+        return res.status(400).json({
+          message:
+            "Preencha os dados obrigatórios do endereço."
+        });
+      }
+
+      const existente = await db.query(
+        `
+          SELECT id
+          FROM customer_addresses
+          WHERE customer_id = $1
+            AND is_default = TRUE
+            AND active = TRUE
+          LIMIT 1
+        `,
+        [req.customerId]
+      );
+
+      let resultado;
+
+      if (existente.rows.length) {
+
+        resultado = await db.query(
+          `
+            UPDATE customer_addresses
+            SET
+              recipient_name = $2,
+              zip_code = $3,
+              street = $4,
+              number = $5,
+              complement = $6,
+              neighborhood = $7,
+              city = $8,
+              state = $9,
+              reference = $10,
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+          `,
+          [
+            existente.rows[0].id,
+            nome,
+            cep,
+            rua,
+            numero,
+            complemento || null,
+            bairro,
+            cidade || null,
+            uf || null,
+            referencia || null
+          ]
+        );
+
+      } else {
+
+        resultado = await db.query(
+          `
+            INSERT INTO customer_addresses (
+              customer_id,
+              label,
+              recipient_name,
+              zip_code,
+              street,
+              number,
+              complement,
+              neighborhood,
+              city,
+              state,
+              reference,
+              is_default,
+              active
+            )
+            VALUES (
+              $1,
+              'Principal',
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              $7,
+              $8,
+              $9,
+              $10,
+              TRUE,
+              TRUE
+            )
+            RETURNING *
+          `,
+          [
+            req.customerId,
+            nome,
+            cep,
+            rua,
+            numero,
+            complemento || null,
+            bairro,
+            cidade || null,
+            uf || null,
+            referencia || null
+          ]
+        );
+      }
+
+      return res.json({
+        ok: true,
+        endereco: resultado.rows[0]
+      });
+
+    } catch (error) {
+      console.error(
+        "POST /api/customer/address:",
+        error
+      );
+
+      return res.status(500).json({
+        message: "Erro ao salvar endereço."
+      });
+    }
+  }
+);
+// =========================================
+// VÁRIOS ENDEREÇOS DO CLIENTE
+// =========================================
+
+
+// LISTAR TODOS OS ENDEREÇOS
+app.get(
+  "/api/customer/addresses",
+  autenticarCliente,
+  async (req, res) => {
+    try {
+      const resultado = await db.query(
+        `
+          SELECT
+            id,
+            label,
+            recipient_name,
+            zip_code,
+            street,
+            number,
+            complement,
+            neighborhood,
+            city,
+            state,
+            reference,
+            is_default
+          FROM customer_addresses
+          WHERE customer_id = $1
+            AND active = TRUE
+          ORDER BY is_default DESC, id DESC
+        `,
+        [req.customerId]
+      );
+
+      return res.json({
+        ok: true,
+        enderecos: resultado.rows
+      });
+
+    } catch (error) {
+      console.error(
+        "GET /api/customer/addresses:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao carregar endereços."
+      });
+    }
+  }
+);
+
+
+// CRIAR NOVO ENDEREÇO
+app.post(
+  "/api/customer/addresses",
+  autenticarCliente,
+  async (req, res) => {
+    const client = await db.connect();
+
+    try {
+      const {
+        label,
+        nome,
+        cep,
+        rua,
+        numero,
+        bairro,
+        cidade,
+        uf,
+        complemento,
+        referencia,
+        principal
+      } = req.body;
+
+      if (
+        !nome ||
+        !cep ||
+        !rua ||
+        !numero ||
+        !bairro
+      ) {
+        return res.status(400).json({
+          message:
+            "Preencha os dados obrigatórios."
+        });
+      }
+
+      await client.query("BEGIN");
+
+      // Verifica se é o primeiro endereço
+      const quantidade =
+        await client.query(
+          `
+            SELECT COUNT(*)::int AS total
+            FROM customer_addresses
+            WHERE customer_id = $1
+              AND active = TRUE
+          `,
+          [req.customerId]
+        );
+
+      const primeiroEndereco =
+        quantidade.rows[0].total === 0;
+
+      const seraPrincipal =
+        primeiroEndereco ||
+        principal === true;
+
+      // Se este será principal,
+      // remove o principal dos outros
+      if (seraPrincipal) {
+        await client.query(
+          `
+            UPDATE customer_addresses
+            SET
+              is_default = FALSE,
+              updated_at = NOW()
+            WHERE customer_id = $1
+              AND active = TRUE
+          `,
+          [req.customerId]
+        );
+      }
+
+      const resultado =
+        await client.query(
+          `
+            INSERT INTO customer_addresses (
+              customer_id,
+              label,
+              recipient_name,
+              zip_code,
+              street,
+              number,
+              complement,
+              neighborhood,
+              city,
+              state,
+              reference,
+              is_default,
+              active
+            )
+            VALUES (
+              $1, $2, $3, $4, $5,
+              $6, $7, $8, $9, $10,
+              $11, $12, TRUE
+            )
+            RETURNING *
+          `,
+          [
+            req.customerId,
+            String(label || "Endereço").trim(),
+            nome,
+            cep,
+            rua,
+            numero,
+            complemento || null,
+            bairro,
+            cidade || null,
+            uf || null,
+            referencia || null,
+            seraPrincipal
+          ]
+        );
+
+      await client.query("COMMIT");
+
+      return res.status(201).json({
+        ok: true,
+        endereco: resultado.rows[0]
+      });
+
+    } catch (error) {
+      await client.query("ROLLBACK");
+
+      console.error(
+        "POST /api/customer/addresses:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao adicionar endereço."
+      });
+
+    } finally {
+      client.release();
+    }
+  }
+);
+
+
+// EDITAR UM ENDEREÇO
+app.put(
+  "/api/customer/addresses/:id",
+  autenticarCliente,
+  async (req, res) => {
+    try {
+      const {
+        label,
+        nome,
+        cep,
+        rua,
+        numero,
+        bairro,
+        cidade,
+        uf,
+        complemento,
+        referencia
+      } = req.body;
+
+      if (
+        !nome ||
+        !cep ||
+        !rua ||
+        !numero ||
+        !bairro
+      ) {
+        return res.status(400).json({
+          message:
+            "Preencha os dados obrigatórios."
+        });
+      }
+
+      const resultado =
+        await db.query(
+          `
+            UPDATE customer_addresses
+            SET
+              label = $3,
+              recipient_name = $4,
+              zip_code = $5,
+              street = $6,
+              number = $7,
+              complement = $8,
+              neighborhood = $9,
+              city = $10,
+              state = $11,
+              reference = $12,
+              updated_at = NOW()
+            WHERE id = $1
+              AND customer_id = $2
+              AND active = TRUE
+            RETURNING *
+          `,
+          [
+            req.params.id,
+            req.customerId,
+            String(label || "Endereço").trim(),
+            nome,
+            cep,
+            rua,
+            numero,
+            complemento || null,
+            bairro,
+            cidade || null,
+            uf || null,
+            referencia || null
+          ]
+        );
+
+      if (!resultado.rows.length) {
+        return res.status(404).json({
+          message:
+            "Endereço não encontrado."
+        });
+      }
+
+      return res.json({
+        ok: true,
+        endereco: resultado.rows[0]
+      });
+
+    } catch (error) {
+      console.error(
+        "PUT /api/customer/addresses/:id:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao editar endereço."
+      });
+    }
+  }
+);
+
+
+// DEFINIR ENDEREÇO PRINCIPAL
+app.put(
+  "/api/customer/addresses/:id/default",
+  autenticarCliente,
+  async (req, res) => {
+    const client = await db.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const existe =
+        await client.query(
+          `
+            SELECT id
+            FROM customer_addresses
+            WHERE id = $1
+              AND customer_id = $2
+              AND active = TRUE
+            LIMIT 1
+          `,
+          [
+            req.params.id,
+            req.customerId
+          ]
+        );
+
+      if (!existe.rows.length) {
+        await client.query("ROLLBACK");
+
+        return res.status(404).json({
+          message:
+            "Endereço não encontrado."
+        });
+      }
+
+      await client.query(
+        `
+          UPDATE customer_addresses
+          SET
+            is_default = FALSE,
+            updated_at = NOW()
+          WHERE customer_id = $1
+            AND active = TRUE
+        `,
+        [req.customerId]
+      );
+
+      const resultado =
+        await client.query(
+          `
+            UPDATE customer_addresses
+            SET
+              is_default = TRUE,
+              updated_at = NOW()
+            WHERE id = $1
+              AND customer_id = $2
+            RETURNING *
+          `,
+          [
+            req.params.id,
+            req.customerId
+          ]
+        );
+
+      await client.query("COMMIT");
+
+      return res.json({
+        ok: true,
+        endereco: resultado.rows[0]
+      });
+
+    } catch (error) {
+      await client.query("ROLLBACK");
+
+      console.error(
+        "PUT endereço principal:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao definir endereço principal."
+      });
+
+    } finally {
+      client.release();
+    }
+  }
+);
+
+
+// EXCLUIR ENDEREÇO
+app.delete(
+  "/api/customer/addresses/:id",
+  autenticarCliente,
+  async (req, res) => {
+    const client = await db.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const resultado =
+        await client.query(
+          `
+            UPDATE customer_addresses
+            SET
+              active = FALSE,
+              updated_at = NOW()
+            WHERE id = $1
+              AND customer_id = $2
+              AND active = TRUE
+            RETURNING id, is_default
+          `,
+          [
+            req.params.id,
+            req.customerId
+          ]
+        );
+
+      if (!resultado.rows.length) {
+        await client.query("ROLLBACK");
+
+        return res.status(404).json({
+          message:
+            "Endereço não encontrado."
+        });
+      }
+
+      // Se apagou o principal,
+      // define outro endereço como principal
+      if (resultado.rows[0].is_default) {
+
+        const proximo =
+          await client.query(
+            `
+              SELECT id
+              FROM customer_addresses
+              WHERE customer_id = $1
+                AND active = TRUE
+              ORDER BY id DESC
+              LIMIT 1
+            `,
+            [req.customerId]
+          );
+
+        if (proximo.rows.length) {
+          await client.query(
+            `
+              UPDATE customer_addresses
+              SET
+                is_default = TRUE,
+                updated_at = NOW()
+              WHERE id = $1
+            `,
+            [proximo.rows[0].id]
+          );
+        }
+      }
+
+      await client.query("COMMIT");
+
+      return res.json({
+        ok: true,
+        message:
+          "Endereço removido."
+      });
+
+    } catch (error) {
+      await client.query("ROLLBACK");
+
+      console.error(
+        "DELETE endereço:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Erro ao remover endereço."
+      });
+
+    } finally {
+      client.release();
+    }
+  }
+);
 // =========================
 // PRODUTOS - POSTGRESQL
 // =========================

@@ -2,7 +2,15 @@ const CONFIG = {
     api: {
         orders: "/api/orders",
         config: "/api/config",
-        products: "/api/products"
+        products: "/api/products",
+
+        register: "/api/auth/register",
+        login: "/api/auth/login",
+        me: "/api/auth/me",
+        logout: "/api/auth/logout",
+
+        address: "/api/customer/address",
+        addresses: "/api/customer/addresses"
     },
 
     entrega: {
@@ -173,6 +181,15 @@ const estado = {
     carrinho: {},
     favoritos: new Set(),
     pagamento: "pix",
+    
+    cliente: null,
+    modoPerfil: "login",
+    erroAuth: "",
+    enderecosSalvos: [],
+
+    adicionandoEndereco: false,
+nomeNovoEndereco: "",
+
 
     endereco: {
         nome: "",
@@ -212,6 +229,609 @@ function dinheiro(valor = 0) {
 
 function apenasNumeros(valor = "") {
     return String(valor).replace(/\D/g, "");
+}
+
+// =========================
+// CLIENTE / AUTENTICAÇÃO
+// =========================
+
+async function carregarCliente() {
+    try {
+        const resposta = await fetch(
+            CONFIG.api.me,
+            {
+                credentials: "same-origin"
+            }
+        );
+
+        if (resposta.status === 401) {
+            estado.cliente = null;
+            return;
+        }
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Erro ao carregar cliente."
+            );
+        }
+
+        estado.cliente = resultado.cliente;
+
+        // Preenche dados básicos do checkout
+        estado.endereco.nome =
+            resultado.cliente.nome || "";
+
+        estado.endereco.email =
+            resultado.cliente.email || "";
+
+        estado.endereco.whatsapp =
+            resultado.cliente.whatsapp || "";
+
+    } catch (erro) {
+        console.error(
+            "Erro carregando cliente:",
+            erro
+        );
+
+        estado.cliente = null;
+    }
+}
+
+async function carregarEnderecoSalvo() {
+    if (!estado.cliente) {
+        return;
+    }
+
+    try {
+        const resposta = await fetch(
+            CONFIG.api.address,
+            {
+                credentials: "same-origin"
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Erro ao carregar endereço."
+            );
+        }
+
+        const endereco = resultado.endereco;
+
+        if (!endereco) {
+            return;
+        }
+
+        estado.endereco.nome =
+            endereco.recipient_name ||
+            estado.cliente.nome ||
+            "";
+
+        estado.endereco.email =
+            estado.cliente.email || "";
+
+        estado.endereco.whatsapp =
+            estado.cliente.whatsapp || "";
+
+        estado.endereco.cep =
+            endereco.zip_code || "";
+
+        estado.endereco.rua =
+            endereco.street || "";
+
+        estado.endereco.numero =
+            endereco.number || "";
+
+        estado.endereco.bairro =
+            endereco.neighborhood || "";
+
+        estado.endereco.cidade =
+            endereco.city || "";
+
+        estado.endereco.uf =
+            endereco.state || "";
+
+        estado.endereco.complemento =
+            endereco.complement || "";
+
+        estado.endereco.referencia =
+            endereco.reference || "";
+
+        console.log(
+            "ENDEREÇO CARREGADO:",
+            endereco
+        );
+
+    } catch (erro) {
+        console.error(
+            "Erro ao carregar endereço salvo:",
+            erro
+        );
+    }
+}
+
+async function carregarEnderecos() {
+    if (!estado.cliente) {
+        estado.enderecosSalvos = [];
+        return;
+    }
+
+    try {
+        const resposta = await fetch(
+            CONFIG.api.addresses,
+            {
+                credentials: "same-origin"
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Erro ao carregar endereços."
+            );
+        }
+
+        estado.enderecosSalvos =
+            resultado.enderecos || [];
+
+    } catch (erro) {
+        console.error(
+            "Erro carregando endereços:",
+            erro
+        );
+
+        estado.enderecosSalvos = [];
+    }
+}
+
+
+async function definirEnderecoPrincipal(id) {
+    try {
+        const resposta = await fetch(
+            `${CONFIG.api.addresses}/${id}/default`,
+            {
+                method: "PUT",
+                credentials: "same-origin"
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Erro ao definir endereço principal."
+            );
+        }
+
+        await carregarEnderecos();
+        await carregarEnderecoSalvo();
+
+        render();
+
+    } catch (erro) {
+        alert(erro.message);
+    }
+}
+
+
+async function excluirEndereco(id) {
+    const confirmar = confirm(
+        "Deseja realmente excluir este endereço?"
+    );
+
+    if (!confirmar) {
+        return;
+    }
+
+    try {
+        const resposta = await fetch(
+            `${CONFIG.api.addresses}/${id}`,
+            {
+                method: "DELETE",
+                credentials: "same-origin"
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Erro ao excluir endereço."
+            );
+        }
+
+        await carregarEnderecos();
+        await carregarEnderecoSalvo();
+
+        render();
+
+    } catch (erro) {
+        alert(erro.message);
+    }
+}
+function novoEndereco() {
+    // Evita abrir dois modais
+    document
+        .getElementById("modal-novo-endereco")
+        ?.remove();
+
+    const modal = document.createElement("div");
+
+    modal.id = "modal-novo-endereco";
+
+    modal.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 20, 50, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 9999;
+    `;
+
+    modal.innerHTML = `
+        <div
+            style="
+                background: white;
+                width: 100%;
+                max-width: 420px;
+                border-radius: 18px;
+                padding: 24px;
+                box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            "
+        >
+            <div
+                style="
+                    display:flex;
+                    align-items:center;
+                    gap:10px;
+                    margin-bottom:8px;
+                "
+            >
+                ${icon("pin", 22)}
+
+                <h2 style="margin:0">
+                    Novo endereço
+                </h2>
+            </div>
+
+            <p style="color:#64748b">
+                Como você deseja identificar este endereço?
+            </p>
+
+            <label>
+                Nome do endereço
+
+                <input
+                    id="nome-novo-endereco"
+                    placeholder="Ex.: Casa, Trabalho..."
+                    maxlength="30"
+                >
+            </label>
+
+            <div
+                style="
+                    display:flex;
+                    gap:8px;
+                    margin-top:14px;
+                    flex-wrap:wrap;
+                "
+            >
+                <button
+                    type="button"
+                    onclick="selecionarNomeEndereco('Casa')"
+                >
+                    🏠 Casa
+                </button>
+
+                <button
+                    type="button"
+                    onclick="selecionarNomeEndereco('Trabalho')"
+                >
+                    💼 Trabalho
+                </button>
+
+                <button
+                    type="button"
+                    onclick="selecionarNomeEndereco('Outro')"
+                >
+                    📍 Outro
+                </button>
+            </div>
+
+            <button
+                class="botao-principal"
+                style="margin-top:20px"
+                onclick="confirmarNovoEndereco()"
+            >
+                Continuar
+            </button>
+
+            <button
+                type="button"
+                style="
+                    width:100%;
+                    margin-top:8px;
+                    border:none;
+                    background:transparent;
+                    padding:12px;
+                    cursor:pointer;
+                "
+                onclick="fecharNovoEndereco()"
+            >
+                Cancelar
+            </button>
+        </div>
+    `;
+
+    modal.addEventListener(
+        "click",
+        function(event) {
+            if (event.target === modal) {
+                fecharNovoEndereco();
+            }
+        }
+    );
+
+    document.body.appendChild(modal);
+
+    document
+        .getElementById("nome-novo-endereco")
+        ?.focus();
+}
+
+
+function selecionarNomeEndereco(nome) {
+    const campo =
+        document.getElementById(
+            "nome-novo-endereco"
+        );
+
+    if (campo) {
+        campo.value = nome;
+    }
+}
+
+
+function fecharNovoEndereco() {
+    document
+        .getElementById("modal-novo-endereco")
+        ?.remove();
+}
+
+
+function confirmarNovoEndereco() {
+    const campo =
+        document.getElementById(
+            "nome-novo-endereco"
+        );
+
+    const nome =
+        String(campo?.value || "").trim();
+
+    if (!nome) {
+        alert(
+            "Digite um nome para o endereço."
+        );
+        return;
+    }
+
+    estado.nomeNovoEndereco = nome;
+    estado.adicionandoEndereco = true;
+
+    fecharNovoEndereco();
+
+    estado.endereco = {
+        nome: estado.cliente?.nome || "",
+        email: estado.cliente?.email || "",
+        whatsapp: estado.cliente?.whatsapp || "",
+
+        cep: "",
+        numero: "",
+        rua: "",
+        bairro: "",
+        cidade: "",
+        uf: "",
+        complemento: "",
+        referencia: ""
+    };
+
+    ir("endereco");
+}
+    
+function mostrarLogin() {
+    estado.modoPerfil = "login";
+    estado.erroAuth = "";
+    render();
+}
+
+
+function mostrarCadastro() {
+    estado.modoPerfil = "cadastro";
+    estado.erroAuth = "";
+    render();
+}
+
+
+async function cadastrarCliente() {
+    const nome =
+        document.getElementById("cadastro-nome")?.value || "";
+
+    const email =
+        document.getElementById("cadastro-email")?.value || "";
+
+    const whatsapp =
+        document.getElementById("cadastro-whatsapp")?.value || "";
+
+    const senha =
+        document.getElementById("cadastro-senha")?.value || "";
+
+    estado.erroAuth = "";
+
+    try {
+        const resposta = await fetch(
+            CONFIG.api.register,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                credentials: "same-origin",
+
+                body: JSON.stringify({
+                    nome,
+                    email,
+                    whatsapp,
+                    senha
+                })
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Não foi possível criar sua conta."
+            );
+        }
+
+        estado.cliente = resultado.cliente;
+
+        estado.endereco.nome =
+            resultado.cliente.nome || "";
+
+        estado.endereco.email =
+            resultado.cliente.email || "";
+
+        estado.endereco.whatsapp =
+            resultado.cliente.whatsapp || "";
+
+        estado.erroAuth = "";
+
+        render();
+
+    } catch (erro) {
+        estado.erroAuth = erro.message;
+        render();
+    }
+}
+
+
+async function entrarCliente() {
+    const email =
+        document.getElementById("login-email")?.value || "";
+
+    const senha =
+        document.getElementById("login-senha")?.value || "";
+
+    estado.erroAuth = "";
+
+    try {
+        const resposta = await fetch(
+            CONFIG.api.login,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                credentials: "same-origin",
+
+                body: JSON.stringify({
+                    email,
+                    senha
+                })
+            }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+            throw new Error(
+                resultado.message ||
+                "Não foi possível entrar."
+            );
+        }
+
+        estado.cliente = resultado.cliente;
+
+        estado.endereco.nome =
+            resultado.cliente.nome || "";
+
+        estado.endereco.email =
+            resultado.cliente.email || "";
+
+        estado.endereco.whatsapp =
+            resultado.cliente.whatsapp || "";
+
+        estado.erroAuth = "";
+
+        await Promise.all([
+    carregarEnderecoSalvo(),
+    carregarEnderecos()
+]);
+
+render();
+
+    } catch (erro) {
+        estado.erroAuth = erro.message;
+        render();
+    }
+}
+
+
+async function sairCliente() {
+    try {
+        await fetch(
+            CONFIG.api.logout,
+            {
+                method: "POST",
+                credentials: "same-origin"
+            }
+        );
+
+    } catch (erro) {
+        console.error(
+            "Erro ao sair:",
+            erro
+        );
+    }
+
+    estado.cliente = null;
+estado.modoPerfil = "login";
+estado.erroAuth = "";
+
+// Limpa os dados pessoais ao sair da conta
+estado.endereco = {
+    nome: "",
+    email: "",
+    whatsapp: "",
+    cep: "",
+    numero: "",
+    rua: "",
+    bairro: "",
+    cidade: "",
+    uf: "",
+    complemento: "",
+    referencia: ""
+};
+
+render();
 }
 
 function produtoPorId(id) {
@@ -403,15 +1023,202 @@ function validarEndereco() {
     return Object.keys(erros).length === 0;
 }
 
-function avancarEndereco() {
+async function avancarEndereco() {
     if (!validarEndereco()) {
         render();
         return;
     }
 
+    // =====================================
+    // ADICIONANDO UM NOVO ENDEREÇO
+    // =====================================
+    if (
+        estado.cliente &&
+        estado.adicionandoEndereco
+    ) {
+        try {
+            const resposta = await fetch(
+                CONFIG.api.addresses,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    credentials: "same-origin",
+
+                    body: JSON.stringify({
+                        label:
+                            estado.nomeNovoEndereco ||
+                            "Endereço",
+
+                        nome:
+                            estado.endereco.nome,
+
+                        cep:
+                            estado.endereco.cep,
+
+                        rua:
+                            estado.endereco.rua,
+
+                        numero:
+                            estado.endereco.numero,
+
+                        bairro:
+                            estado.endereco.bairro,
+
+                        cidade:
+                            estado.endereco.cidade,
+
+                        uf:
+                            estado.endereco.uf,
+
+                        complemento:
+                            estado.endereco.complemento,
+
+                        referencia:
+                            estado.endereco.referencia,
+
+                        principal: false
+                    })
+                }
+            );
+
+            const resultado =
+                await resposta.json();
+
+            if (!resposta.ok) {
+                throw new Error(
+                    resultado.message ||
+                    "Não foi possível adicionar o endereço."
+                );
+            }
+
+            // Sai do modo "novo endereço"
+            estado.adicionandoEndereco = false;
+            estado.nomeNovoEndereco = "";
+
+            // Atualiza a lista do perfil
+            await carregarEnderecos();
+
+            // Volta a carregar o principal no checkout
+            await carregarEnderecoSalvo();
+
+            alert(
+                "Novo endereço adicionado com sucesso!"
+            );
+
+            ir("perfil");
+
+            return;
+
+        } catch (erro) {
+            console.error(
+                "Erro adicionando endereço:",
+                erro
+            );
+
+            alert(erro.message);
+
+            return;
+        }
+    }
+
+
+    // =====================================
+    // ENDEREÇO PRINCIPAL NORMAL
+    // =====================================
+    if (estado.cliente) {
+        try {
+            const resposta = await fetch(
+                CONFIG.api.address,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    credentials: "same-origin",
+
+                    body: JSON.stringify({
+                        nome:
+                            estado.endereco.nome,
+
+                        cep:
+                            estado.endereco.cep,
+
+                        rua:
+                            estado.endereco.rua,
+
+                        numero:
+                            estado.endereco.numero,
+
+                        bairro:
+                            estado.endereco.bairro,
+
+                        cidade:
+                            estado.endereco.cidade,
+
+                        uf:
+                            estado.endereco.uf,
+
+                        complemento:
+                            estado.endereco.complemento,
+
+                        referencia:
+                            estado.endereco.referencia
+                    })
+                }
+            );
+
+            const resultado =
+                await resposta.json();
+
+            if (!resposta.ok) {
+                throw new Error(
+                    resultado.message ||
+                    "Não foi possível salvar o endereço."
+                );
+            }
+
+            await carregarEnderecos();
+
+        } catch (erro) {
+            console.error(
+                "Erro salvando endereço:",
+                erro
+            );
+
+            alert(
+                "Não foi possível salvar o endereço."
+            );
+
+            return;
+        }
+    }
+
+
+    // =====================================
+    // SEM PRODUTOS NO CARRINHO
+    // =====================================
+    if (quantidadeCarrinho() === 0) {
+        alert(
+            "Endereço salvo com sucesso!"
+        );
+
+        ir("perfil");
+
+        return;
+    }
+
+
+    // =====================================
+    // COMPRA NORMAL
+    // =====================================
     ir("entrega");
 }
-
 function gerarNumeroPedido() {
     return `#${1000 + Math.floor(Math.random() * 9000)}`;
 }
@@ -1265,12 +2072,17 @@ function endereco() {
             </div>
 
             <button
-                class="botao-principal"
-                onclick="avancarEndereco()"
-            >
-                Continuar
-                ${icon("seta", 16)}
-            </button>
+    class="botao-principal"
+    onclick="avancarEndereco()"
+>
+    ${
+        quantidadeCarrinho() === 0
+            ? "Salvar endereço"
+            : "Continuar para entrega"
+    }
+
+    ${icon("seta", 16)}
+</button>
 
         </main>
 
@@ -1980,7 +2792,341 @@ function favoritosTela() {
 }
 
 function perfilTela() {
-    
+
+    // CLIENTE LOGADO
+    if (estado.cliente) {
+        return `
+            ${header("home")}
+
+            <main class="container">
+
+                <h1 class="titulo">
+                    ${icon("usuario", 22)}
+                    Meu perfil
+                </h1>
+
+                <p class="subtitulo">
+                    Olá, ${estado.cliente.nome}!
+                </p>
+
+                <div class="pedido-card">
+
+                    <p>Nome</p>
+                    <strong>
+                        ${estado.cliente.nome}
+                    </strong>
+
+                    <hr>
+
+                    <p>E-mail</p>
+                    <strong>
+                        ${estado.cliente.email}
+                    </strong>
+
+                    <hr>
+
+                    <p>WhatsApp</p>
+                    <strong>
+                        ${estado.cliente.whatsapp}
+                    </strong>
+
+                </div>
+<h2 style="margin-top:24px">
+    ${icon("pin", 20)}
+    Meus endereços
+</h2>
+
+<div style="margin-top:12px">
+
+    ${
+        estado.enderecosSalvos.length === 0
+
+            ? `
+                <div class="pedido-card">
+                    <p>
+                        Nenhum endereço cadastrado.
+                    </p>
+                </div>
+            `
+
+            : estado.enderecosSalvos.map(endereco => `
+                <div
+                    class="pedido-card"
+                    style="margin-bottom:12px"
+                >
+
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                    ">
+
+                        <strong>
+                            ${endereco.label || "Endereço"}
+                        </strong>
+
+                        ${
+                            endereco.is_default
+                                ? `
+                                    <span class="aberto">
+                                        Principal
+                                    </span>
+                                `
+                                : ""
+                        }
+
+                    </div>
+
+                    <p style="margin-top:10px">
+                        ${endereco.street},
+                        ${endereco.number}
+                    </p>
+
+                    <p>
+                        ${endereco.neighborhood}
+
+                        ${
+                            endereco.city
+                                ? ` - ${endereco.city}`
+                                : ""
+                        }
+                    </p>
+
+                    <p>
+                        CEP ${endereco.zip_code}
+                    </p>
+
+                    ${
+                        endereco.complement
+                            ? `
+                                <p>
+                                    ${endereco.complement}
+                                </p>
+                            `
+                            : ""
+                    }
+
+                    ${
+                        !endereco.is_default
+                            ? `
+                                <button
+                                    class="botao-principal"
+                                    style="margin-top:12px"
+                                    onclick="
+                                        definirEnderecoPrincipal(
+                                            ${endereco.id}
+                                        )
+                                    "
+                                >
+                                    Usar como principal
+                                </button>
+                            `
+                            : ""
+                    }
+
+                    <button
+                        class="botao-principal"
+                        style="margin-top:8px"
+                        onclick="
+                            excluirEndereco(
+                                ${endereco.id}
+                            )
+                        "
+                    >
+                        ${icon("lixo", 16)}
+                        Excluir endereço
+                    </button>
+
+                </div>
+            `).join("")
+    }
+
+</div>
+                <button
+    class="botao-principal"
+    onclick="novoEndereco()"
+>
+    + Adicionar novo endereço
+</button>
+
+<button
+    class="botao-principal"
+    onclick="ir('endereco')"
+    style="margin-top:8px"
+>
+    ${icon("pin", 18)}
+    Editar endereço principal
+</button>
+
+                <button
+                    class="botao-principal"
+                    onclick="sairCliente()"
+                    style="margin-top:12px"
+                >
+                    Sair da conta
+                </button>
+
+            </main>
+
+            ${bottomNav("perfil")}
+        `;
+    }
+
+
+    // CADASTRO
+    if (estado.modoPerfil === "cadastro") {
+
+        return `
+            ${header("home")}
+
+            <main class="container">
+
+                <h1 class="titulo">
+                    Criar minha conta
+                </h1>
+
+                <p class="subtitulo">
+                    Cadastre-se para facilitar seus próximos pedidos.
+                </p>
+
+                <div class="form">
+
+                    <label>
+                        Nome completo
+                        <input
+                            id="cadastro-nome"
+                            placeholder="Seu nome"
+                        >
+                    </label>
+
+                    <label>
+                        E-mail
+                        <input
+                            id="cadastro-email"
+                            type="email"
+                            placeholder="seuemail@email.com"
+                        >
+                    </label>
+
+                    <label>
+                        WhatsApp
+                        <input
+                            id="cadastro-whatsapp"
+                            placeholder="(15) 99999-9999"
+                        >
+                    </label>
+
+                    <label>
+                        Senha
+                        <input
+                            id="cadastro-senha"
+                            type="password"
+                            placeholder="Mínimo 8 caracteres"
+                        >
+                    </label>
+
+                    ${
+                        estado.erroAuth
+                            ? `
+                                <small class="msg-erro">
+                                    ${estado.erroAuth}
+                                </small>
+                              `
+                            : ""
+                    }
+
+                    <button
+                        class="botao-principal"
+                        onclick="cadastrarCliente()"
+                    >
+                        Criar conta
+                    </button>
+
+                    <button
+                        class="botao-principal"
+                        onclick="mostrarLogin()"
+                        style="margin-top:12px"
+                    >
+                        Já tenho uma conta
+                    </button>
+
+                </div>
+
+            </main>
+
+            ${bottomNav("perfil")}
+        `;
+    }
+
+
+    // LOGIN
+    return `
+        ${header("home")}
+
+        <main class="container">
+
+            <h1 class="titulo">
+                ${icon("usuario", 22)}
+                Minha conta
+            </h1>
+
+            <p class="subtitulo">
+                Entre para acessar seus dados e pedidos.
+            </p>
+
+            <div class="form">
+
+                <label>
+                    E-mail
+
+                    <input
+                        id="login-email"
+                        type="email"
+                        placeholder="seuemail@email.com"
+                    >
+                </label>
+
+                <label>
+                    Senha
+
+                    <input
+                        id="login-senha"
+                        type="password"
+                        placeholder="Sua senha"
+                    >
+                </label>
+
+                ${
+                    estado.erroAuth
+                        ? `
+                            <small class="msg-erro">
+                                ${estado.erroAuth}
+                            </small>
+                          `
+                        : ""
+                }
+
+                <button
+                    class="botao-principal"
+                    onclick="entrarCliente()"
+                >
+                    Entrar
+                </button>
+
+                <button
+                    class="botao-principal"
+                    onclick="mostrarCadastro()"
+                    style="margin-top:12px"
+                >
+                    Criar minha conta
+                </button>
+
+            </div>
+
+        </main>
+
+        ${bottomNav("perfil")}
+    `;
 }
 
 function maisTela() {
@@ -2004,7 +3150,8 @@ const telas = {
     pagamento,
     processando,
     pix: pixPagamento,
-    confirmacao
+    confirmacao,
+    perfil: perfilTela
 };
 
 function render() {
@@ -2024,7 +3171,18 @@ function render() {
 }
 
 async function iniciarApp() {
-    await carregarProdutos();
+    await Promise.all([
+        carregarProdutos(),
+        carregarCliente()
+    ]);
+
+    if (estado.cliente) {
+        await Promise.all([
+            carregarEnderecoSalvo(),
+            carregarEnderecos()
+        ]);
+    }
+
     render();
 }
 
