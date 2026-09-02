@@ -95,6 +95,40 @@ function autenticarCliente(req, res, next) {
     });
   }
 }
+function identificarClienteOpcional(req, res, next) {
+  try {
+    const token =
+      req.cookies?.[AUTH_COOKIE];
+
+    // Sem login: continua como visitante
+    if (!token) {
+      req.customerId = null;
+      return next();
+    }
+
+    const dados = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    // Cookie existe, mas não é de cliente
+    if (dados.tipo !== "cliente") {
+      req.customerId = null;
+      return next();
+    }
+
+    // Cliente logado
+    req.customerId = dados.sub;
+
+    next();
+
+  } catch (error) {
+    // Token inválido/expirado:
+    // não bloqueia a compra como visitante
+    req.customerId = null;
+    next();
+  }
+}
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -132,7 +166,9 @@ async function saveOrderToDatabase({
   statusDetail,
   metodo,
   endereco,
-  cart
+  cart,
+  customerId,
+  customerAddressId
 }) {
   const client = await db.connect();
 
@@ -159,51 +195,54 @@ async function saveOrderToDatabase({
         : null;
 
     const orderResult =
-      await client.query(
-        `
-          INSERT INTO orders (
-            order_number,
-            customer_name,
-            customer_phone,
-            customer_email,
-            delivery_address,
-            delivery_reference,
-            delivery_fee,
-            subtotal,
-            total,
-            payment_method,
-            payment_status,
-            payment_status_detail,
-            order_status,
-            mercado_pago_order_id,
-            mercado_pago_payment_id
-          )
-          VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9, $10,
-            $11, $12, $13, $14, $15
-          )
-          RETURNING id
-        `,
-        [
-          orderNumber,
-          endereco.nome,
-          endereco.whatsapp,
-          endereco.email || null,
-          deliveryAddress,
-          endereco.referencia || null,
-          cart.entrega,
-          cart.subtotal,
-          cart.total,
-          metodo,
-          status,
-          statusDetail || null,
-          "received",
-          String(mpOrder.id),
-          paymentId
-        ]
-      );
-
+  await client.query(
+    `
+      INSERT INTO orders (
+        order_number,
+        customer_id,
+        customer_address_id,
+        customer_name,
+        customer_phone,
+        customer_email,
+        delivery_address,
+        delivery_reference,
+        delivery_fee,
+        subtotal,
+        total,
+        payment_method,
+        payment_status,
+        payment_status_detail,
+        order_status,
+        mercado_pago_order_id,
+        mercado_pago_payment_id
+      )
+      VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7, $8,
+        $9, $10, $11, $12,
+        $13, $14, $15, $16
+      )
+      RETURNING id
+    `,
+    [
+      orderNumber,
+      customerId || null,
+      endereco.nome,
+      endereco.whatsapp,
+      endereco.email || null,
+      deliveryAddress,
+      endereco.referencia || null,
+      cart.entrega,
+      cart.subtotal,
+      cart.total,
+      metodo,
+      status,
+      statusDetail || null,
+      "received",
+      String(mpOrder.id),
+      paymentId
+    ]
+  );
     const databaseOrderId =
       orderResult.rows[0].id;
 
@@ -1683,15 +1722,19 @@ app.get("/api/products", async (req, res) => {
 // CRIAR PEDIDO
 // =========================
 
-app.post("/api/orders", async (req, res) => {
+app.post(
+  "/api/orders",
+  identificarClienteOpcional,
+  async (req, res) => {
   try {
-    const {
-      metodo,
-      unidadeId,
-      itens,
-      endereco,
-      pagamento
-    } = req.body;
+   const {
+  metodo,
+  unidadeId,
+  itens,
+  endereco,
+  enderecoId,
+  pagamento
+} = req.body;
 
     if (!["pix", "cartao"].includes(metodo)) {
       return res.status(400).json({
@@ -1720,7 +1763,36 @@ app.post("/api/orders", async (req, res) => {
           "Preencha os dados obrigatórios de entrega."
       });
     }
+let customerAddressId = null;
 
+// Se estiver logado e enviou um endereço salvo,
+// confirma que esse endereço realmente pertence ao cliente.
+if (req.customerId && enderecoId) {
+  const enderecoSalvo = await db.query(
+    `
+      SELECT id
+      FROM customer_addresses
+      WHERE id = $1
+        AND customer_id = $2
+        AND active = TRUE
+      LIMIT 1
+    `,
+    [
+      enderecoId,
+      req.customerId
+    ]
+  );
+
+  if (!enderecoSalvo.rows.length) {
+    return res.status(400).json({
+      message:
+        "O endereço selecionado não pertence à sua conta."
+    });
+  }
+
+  customerAddressId =
+    enderecoSalvo.rows[0].id;
+}
     const cart =
        await calculateCart(itens, unidadeId);
 
@@ -1816,7 +1888,10 @@ await saveOrderToDatabase({
   statusDetail,
   metodo,
   endereco,
-  cart
+  cart,
+  customerId: req.customerId || null
+
+  customerAddressId
 });
 
     const mpMethod =
@@ -1863,8 +1938,8 @@ await saveOrderToDatabase({
           "Erro interno ao criar pedido."
       });
   }
-});
-
+  }
+);
 
 // =========================
 // CONSULTAR PEDIDO
