@@ -1,0 +1,261 @@
+/* =====================================================
+   PAGAMENTO
+===================================================== */
+
+.pagamento {
+
+    background: white;
+
+    border: 2px solid var(--borda);
+
+    border-radius: 16px;
+
+    padding: 16px;
+
+    margin: 12px 0;
+
+    width: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    text-align: left;
+}
+
+
+.pagamento.ativo {
+
+    border-color: var(--azul-3);
+
+    background: #f0f7ff;
+}
+
+
+.pagamento .icone {
+
+    font-size: 22px;
+
+    width: 42px;
+
+    height: 42px;
+
+    min-width: 42px;
+
+    border-radius: 12px;
+
+    background: var(--azul-claro);
+
+    color: var(--azul-3);
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+}
+
+
+.pagamento div:nth-child(2) {
+
+    flex: 1;
+}
+
+
+.pagamento small {
+
+    display: block;
+
+    color: var(--cinza);
+
+    margin-top: 4px;
+}
+
+.pagamento .radio {
+
+    width: 20px;
+
+    height: 20px;
+
+    border-radius: 50%;
+
+    border: 2px solid var(--borda);
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+}
+
+.pagamento.ativo .radio {
+
+    border-color: var(--azul-3);
+}
+
+.pagamento.ativo .radio::after {
+
+    content: "";
+
+    width: 10px;
+
+    height: 10px;
+
+    border-radius: 50%;
+
+    background: var(--azul-3);
+}
+
+
+/* =====================================================
+   BOTÃO PRINCIPAL
+===================================================== */
+
+.botao-principal {
+
+    width: 100%;
+
+    border: 0;
+
+    border-radius: 14px;
+
+    background: var(--azul);
+
+    color: white;
+
+    padding: 17px;
+
+    font-size: 16px;
+
+    font-weight: bold;
+
+    margin-top: 15px;
+
+    transition: .2s;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 8px;
+}
+
+
+.botao-principal:hover {
+
+    background: #0b2b55;
+
+    transform: translateY(-1px);
+}
+
+
+/* =====================================================
+   PROCESSANDO PAGAMENTO
+===================================================== */
+
+.spinner {
+
+    width: 56px;
+
+    height: 56px;
+
+    border-radius: 50%;
+
+    border: 5px solid var(--borda);
+
+    border-top-color: var(--azul-3);
+
+    margin: 45px auto 20px;
+
+    animation: girar .8s linear infinite;
+}
+
+@keyframes girar {
+
+    to {
+        transform: rotate(360deg);
+    }
+
+}
+
+
+/* =====================================================
+   CONFIRMAÇÃO
+===================================================== */
+
+.confirmacao {
+
+    text-align: center;
+}
+
+
+.check {
+
+    width: 80px;
+
+    height: 80px;
+
+    border-radius: 50%;
+
+    background: var(--verde);
+
+    color: white;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 40px;
+
+    margin: 35px auto 20px;
+
+    box-shadow: 0 10px 25px rgba(31,201,107,.35);
+}
+
+
+.pedido-card {
+
+    background: white;
+
+    border-radius: 18px;
+
+    padding: 20px;
+
+    margin: 20px 0;
+
+    text-align: left;
+
+    box-shadow:
+        0 3px 15px
+        rgba(7,26,58,.07);
+}
+
+
+.pedido-card p {
+
+    color: var(--cinza);
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    margin-bottom: 4px;
+}
+
+
+.pedido-numero {
+
+    color: var(--azul-3);
+
+    font-size: 24px;
+
+    font-weight: bold;
+}

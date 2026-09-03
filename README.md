@@ -1,98 +1,113 @@
-# Polo Norte Bebidas — Backend + Mercado Pago
+# Polo Norte Bebidas
 
-## O que foi integrado
+Aplicação web mobile-first para pedidos de bebidas, com catálogo, carrinho, cadastro/login de clientes, múltiplos endereços, checkout e integração com Mercado Pago.
 
-- Backend Node.js + Express.
-- Catálogo e preços recalculados no servidor.
-- Taxa de entrega por unidade.
-- Criação de pedidos.
-- Mercado Pago Checkout Transparente / Orders API.
-- Pix com QR Code e Pix Copia e Cola.
-- Cartão de crédito/débito usando o Card Payment Brick do Mercado Pago.
-- Webhook básico para atualização de status.
-- Consulta de status de pedido.
-- Chave privada somente no `.env`.
+## Stack
 
-O frontend original foi preservado e adaptado para chamar o backend.
+- Node.js 18+
+- Express 5
+- PostgreSQL
+- HTML, CSS e JavaScript vanilla
+- Mercado Pago Orders API / Checkout Transparente
+- JWT em cookie HTTP-only
 
-## 1. Instalação
+## Estrutura
 
-Instale Node.js 18 ou superior.
+```text
+polo-norte/
+├── server.js                 # Bootstrap do servidor Express
+├── database/
+│   ├── db.js                 # Pool PostgreSQL
+│   ├── schema.sql            # Estrutura do banco
+│   └── seed.sql              # Dados iniciais
+├── src/
+│   ├── middleware/
+│   │   └── auth.middleware.js
+│   ├── routes/
+│   │   ├── auth.routes.js
+│   │   ├── customer.routes.js
+│   │   ├── orders.routes.js
+│   │   ├── products.routes.js
+│   │   └── system.routes.js
+│   └── services/
+│       ├── cart.service.js
+│       ├── mercadoPago.service.js
+│       └── order.service.js
+└── public/
+    ├── index.html
+    ├── css/
+    │   ├── base.css
+    │   ├── catalog.css
+    │   ├── checkout.css
+    │   ├── payment.css
+    │   ├── responsive.css
+    │   └── mercadopago.css
+    └── js/
+        ├── core.js
+        ├── session.js
+        ├── addresses.js
+        ├── auth.js
+        ├── cart.js
+        ├── payment.js
+        ├── layout.js
+        ├── screens/
+        │   ├── home.js
+        │   ├── cart.js
+        │   ├── address.js
+        │   ├── delivery.js
+        │   ├── payment.js
+        │   └── account.js
+        └── app.js
+```
+
+## Instalação
 
 ```bash
 npm install
 ```
 
-## 2. Configuração do Mercado Pago
+Crie o `.env` usando `.env.example` como modelo e configure PostgreSQL, Mercado Pago e `JWT_SECRET`.
 
-No painel do Mercado Pago, crie uma aplicação e copie:
+## Banco de dados
 
-- Access Token de teste para `MERCADO_PAGO_ACCESS_TOKEN`
-- Public Key de teste para `MERCADO_PAGO_PUBLIC_KEY`
+Crie o banco `polo_norte` e execute, nesta ordem:
 
-Crie `.env` a partir de `.env.example`.
-
-Exemplo:
-
-```env
-PORT=3000
-MERCADO_PAGO_ACCESS_TOKEN=APP_USR-...
-MERCADO_PAGO_PUBLIC_KEY=TEST-...
+```text
+database/schema.sql
+database/seed.sql
 ```
 
-A chave privada deve ficar somente no servidor.
-
-## 3. Rodar
+## Rodar em desenvolvimento
 
 ```bash
-npm start
+npm run dev
 ```
 
-Abra:
+Abra `http://localhost:3000`.
 
-http://localhost:3000
+## Endpoints principais
 
-Teste a API:
+- `GET /api/health`
+- `GET /api/config`
+- `GET /api/products`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+- `GET /api/customer/addresses`
+- `POST /api/customer/addresses`
+- `POST /api/orders`
+- `GET /api/orders/:id`
+- `POST /api/webhooks/mercadopago`
 
-http://localhost:3000/api/health
+## Segurança
 
-## 4. Pix
+- `.env` não deve ser versionado.
+- O Access Token do Mercado Pago fica somente no backend.
+- Senhas são armazenadas com bcrypt.
+- A sessão do cliente usa JWT em cookie HTTP-only.
+- Em produção, use HTTPS e credenciais próprias de produção.
 
-O cliente escolhe Pix e o backend cria uma Order no Mercado Pago. A resposta devolve:
+## Organização desta versão
 
-- QR Code
-- Pix Copia e Cola
-- link de pagamento
-- ID da Order
-
-Depois o cliente pode consultar o status.
-
-## 5. Cartão
-
-O formulário antigo de número/validade/CVV foi substituído pelo Card Payment Brick. Isso é importante porque os dados sensíveis do cartão não devem ser enviados para o seu backend. O Brick gera um token e o backend envia esse token ao Mercado Pago.
-
-## 6. Webhook
-
-Em produção, configure no painel do Mercado Pago uma URL pública:
-
-https://SEU-DOMINIO/api/webhooks/mercadopago
-
-Para testar localmente, use um túnel HTTPS como ngrok.
-
-## 7. Importante antes de produção
-
-Este projeto é uma base funcional de MVP. Antes de colocar em produção, recomendo:
-
-- banco de dados (PostgreSQL/MongoDB);
-- autenticação do painel administrativo;
-- painel para aceitar/recusar pedidos;
-- controle real de estoque;
-- cálculo de taxa por distância/CEP;
-- HTTPS;
-- validação antifraude e regras de negócio;
-- logs;
-- tratamento completo de webhooks;
-- política de privacidade/LGPD;
-- controle de idade para venda de bebidas alcoólicas.
-
-# polo-norte
+A versão anterior concentrava backend, telas e estilos em arquivos monolíticos. Esta estrutura separa responsabilidades sem alterar o fluxo funcional existente, facilitando manutenção e as próximas etapas do projeto.

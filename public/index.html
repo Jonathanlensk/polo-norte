@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#061B3A">
     <title>Polo Norte Bebidas</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/base.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/catalog.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/checkout.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/payment.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/responsive.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/mercadopago.css?v=20260902-credito-debito-2">
+    <link rel="stylesheet" href="css/orders.css?v=20260902-credito-debito-2">
 </head>
 <body>
     <div id="app"></div>
 
-    <!-- SDK oficial do Mercado Pago para tokenização/Checkout Bricks -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
 
-    <!-- Chave pública: pode ficar no frontend. A chave privada fica somente no .env do backend. -->
     <script>
         fetch("/api/config")
             .then(r => r.json())
@@ -23,6 +27,21 @@
             .catch(console.error);
     </script>
 
-    <script src="script.js"></script>
+    <script src="js/core.js?v=20260902-credito-debito-2"></script>
+    <script src="js/session.js?v=20260902-credito-debito-2"></script>
+    <script src="js/addresses.js?v=20260902-credito-debito-2"></script>
+    <script src="js/auth.js?v=20260902-credito-debito-2"></script>
+    <script src="js/cart.js?v=20260902-credito-debito-2"></script>
+    <script src="js/payment.js?v=20260902-credito-debito-2"></script>
+    <script src="js/orders.js?v=20260902-credito-debito-2"></script>
+    <script src="js/layout.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/home.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/cart.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/address.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/delivery.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/payment.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/account.js?v=20260902-credito-debito-2"></script>
+    <script src="js/screens/orders.js?v=20260902-credito-debito-2"></script>
+    <script src="js/app.js?v=20260902-credito-debito-2"></script>
 </body>
 </html>

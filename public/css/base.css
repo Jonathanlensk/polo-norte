@@ -1,0 +1,568 @@
+/* =====================================================
+   POLO NORTE BEBIDAS
+   CSS PRINCIPAL
+===================================================== */
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+
+    --azul: #061b3a;
+    --azul-escuro: #04152e;
+    --azul-2: #082b59;
+    --azul-3: #0968d5;
+    --azul-claro: #eaf4ff;
+
+    --branco: #ffffff;
+
+    --cinza: #68758a;
+    --cinza-claro: #f4f7fb;
+    --borda: #dde4ee;
+
+    --verde: #1fc96b;
+    --vermelho: #e0483e;
+    --amarelo: #f5a623;
+
+    --sombra:
+        0 5px 20px rgba(7, 26, 58, .08);
+
+    --sombra-forte:
+        0 10px 30px rgba(7, 26, 58, .14);
+}
+
+
+/* =====================================================
+   GERAL
+===================================================== */
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+
+    margin: 0;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    background: var(--cinza-claro);
+
+    color: var(--azul);
+
+    min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+
+    font-family: inherit;
+}
+
+button {
+
+    cursor: pointer;
+}
+
+button:disabled {
+
+    opacity: .5;
+
+    cursor: not-allowed;
+}
+
+.icon {
+
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.15em;
+    flex-shrink: 0;
+}
+
+.icone-svg {
+
+    display: inline-flex;
+}
+
+
+/* =====================================================
+   HEADER
+===================================================== */
+
+.header {
+
+    height: 68px;
+
+    background: var(--azul);
+
+    color: white;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 10px 16px;
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 1000;
+
+    box-shadow: 0 4px 18px rgba(2, 10, 25, .25);
+}
+
+
+.logo {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+}
+
+
+.logo-img {
+
+    display: block;
+
+    width: auto;
+}
+
+
+.logo-img-header {
+
+    height: 38px;
+}
+
+
+.logo-img-hero {
+
+    height: 78px;
+
+    margin: 0 auto;
+
+    filter: drop-shadow(0 6px 18px rgba(0,0,0,.35));
+}
+
+
+.header-btn {
+
+    background: #102d55;
+
+    color: white;
+
+    border: 1px solid #355276;
+
+    border-radius: 13px;
+
+    padding: 9px 12px;
+
+    font-size: 18px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    min-width: 42px;
+
+    height: 42px;
+
+    transition: .15s;
+}
+
+.header-placeholder {
+
+    width: 42px;
+
+    height: 42px;
+
+    flex: 0 0 42px;
+}
+
+
+.header-btn:hover {
+
+    background: #163a6c;
+}
+
+.header-cart {
+
+    position: relative;
+
+    font-size: 20px;
+}
+
+.header-cart .badge {
+
+    position: absolute;
+
+    top: -6px;
+
+    right: -6px;
+
+    background: var(--azul-3);
+
+    color: white;
+
+    border-radius: 20px;
+
+    font-size: 10px;
+
+    font-weight: bold;
+
+    min-width: 17px;
+
+    height: 17px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 0 4px;
+
+    border: 2px solid var(--azul);
+}
+
+
+/* =====================================================
+   HERO
+===================================================== */
+
+.hero {
+
+    background:
+        radial-gradient(
+            circle at 15% 15%,
+            rgba(9,104,213,.35),
+            transparent 45%
+        ),
+        radial-gradient(
+            circle at 85% 85%,
+            rgba(9,104,213,.25),
+            transparent 50%
+        ),
+        linear-gradient(
+            160deg,
+            var(--azul),
+            var(--azul-2) 70%
+        );
+
+    color: white;
+
+    text-align: center;
+
+    padding: 38px 18px 46px;
+
+    position: relative;
+
+    overflow: hidden;
+}
+
+.hero::before,
+.hero::after {
+
+    content: "❄";
+
+    position: absolute;
+
+    font-size: 26px;
+
+    color: rgba(255,255,255,.18);
+
+    pointer-events: none;
+}
+
+.hero::before {
+
+    top: 18px;
+    left: 8%;
+}
+
+.hero::after {
+
+    bottom: 24px;
+    right: 10%;
+    font-size: 34px;
+}
+
+
+.hero .logo {
+
+    justify-content: center;
+}
+
+
+.hero h1 {
+
+    font-size: 30px;
+
+    line-height: 1.15;
+
+    margin: 26px 0;
+
+    font-weight: 800;
+}
+
+
+.hero h1 span {
+
+    color: #39aaff;
+}
+
+
+.beneficios {
+
+    display: flex;
+
+    justify-content: center;
+
+    gap: 10px;
+
+    flex-wrap: wrap;
+
+    color: #dbeaff;
+
+    font-size: 12px;
+}
+
+
+.beneficio {
+
+    background: rgba(255,255,255,.09);
+
+    border: 1px solid rgba(255,255,255,.12);
+
+    padding: 9px 12px;
+
+    border-radius: 12px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    font-weight: 600;
+}
+
+
+/* =====================================================
+   CONTAINER
+===================================================== */
+
+.container {
+
+    max-width: 950px;
+
+    margin: auto;
+
+    padding: 22px 16px 130px;
+}
+
+
+.titulo {
+
+    font-size: 25px;
+
+    margin-bottom: 4px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+}
+
+
+.subtitulo {
+
+    color: var(--cinza);
+
+    margin-top: 0;
+}
+
+
+/* =====================================================
+   UNIDADES
+===================================================== */
+
+.unidades {
+
+    display: grid;
+
+    gap: 14px;
+
+    margin-top: 25px;
+}
+
+
+.unidade {
+
+    background: white;
+
+    border: 0;
+
+    border-radius: 18px;
+
+    padding: 14px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 14px;
+
+    width: 100%;
+
+    text-align: left;
+
+    box-shadow: var(--sombra);
+
+    transition: .2s;
+}
+
+
+.unidade:hover {
+
+    transform: translateY(-2px);
+
+    box-shadow: var(--sombra-forte);
+}
+
+
+.unidade-img {
+
+    width: 78px;
+
+    height: 68px;
+
+    min-width: 78px;
+
+    border-radius: 14px;
+
+    background:
+        linear-gradient(
+            150deg,
+            var(--azul-2),
+            var(--azul)
+        );
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    color: #7fb8ff;
+
+    font-size: 26px;
+
+    position: relative;
+
+    overflow: hidden;
+}
+
+.unidade-img::after {
+
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background:
+        repeating-linear-gradient(
+            45deg,
+            rgba(255,255,255,.05) 0 6px,
+            transparent 6px 12px
+        );
+}
+
+
+.unidade-info {
+
+    flex: 1;
+}
+
+
+.unidade-info h3 {
+
+    margin: 0 0 6px;
+
+    font-size: 17px;
+}
+
+
+.unidade-info p {
+
+    margin: 0;
+
+    color: var(--cinza);
+
+    font-size: 13px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 4px;
+}
+
+
+.aberto {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    margin-top: 8px;
+
+    background: #e9f9ef;
+
+    color: #15904c;
+
+    border-radius: 7px;
+
+    padding: 5px 8px;
+
+    font-size: 11px;
+
+    font-weight: bold;
+}
+
+.aberto .ponto {
+
+    width: 6px;
+
+    height: 6px;
+
+    border-radius: 50%;
+
+    background: #15904c;
+}
+
+.unidade-seta {
+
+    color: var(--cinza);
+
+    font-size: 20px;
+}

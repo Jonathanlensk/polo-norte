@@ -1,0 +1,156 @@
+/* Mercado Pago */
+.pix-qr {
+    display: block;
+    width: min(280px, 100%);
+    margin: 10px auto 20px;
+    border-radius: 12px;
+    background: #fff;
+}
+
+/* =====================================================
+   CARTÃO - CARD PAYMENT BRICK
+===================================================== */
+
+.card-payment-box {
+    margin-top: 16px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--borda);
+    border-radius: 18px;
+    box-shadow: 0 4px 18px rgba(7, 26, 58, .06);
+}
+
+.card-payment-safe {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 14px;
+    background: #f0f7ff;
+    color: var(--azul);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#card-payment-loading {
+    padding: 24px 10px;
+    text-align: center;
+    color: var(--cinza);
+    font-size: 14px;
+}
+
+.card-payment-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 12px;
+    background: #fff1f2;
+    color: #9f1239;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.card-payment-retry {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.card-status-page {
+    padding-bottom: 36px;
+    text-align: center;
+}
+
+.card-status-icon {
+    width: 72px;
+    height: 72px;
+    margin: 28px auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #eaf3ff;
+    color: var(--azul-3);
+}
+
+.card-status-title {
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.card-status-subtitle {
+    max-width: 420px;
+    margin: 0 auto 20px;
+}
+
+.card-challenge-box {
+    overflow: hidden;
+    width: 100%;
+    max-width: 520px;
+    margin: 18px auto;
+    background: #fff;
+    border: 1px solid var(--borda);
+    border-radius: 18px;
+    box-shadow: 0 6px 24px rgba(7, 26, 58, .08);
+}
+
+#card-3ds-frame {
+    display: block;
+    width: 100%;
+    height: 520px;
+    border: 0;
+    background: #fff;
+}
+
+.card-status-waiting {
+    margin: 20px auto;
+    padding: 22px 18px;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    background: #fff;
+    border: 1px solid var(--borda);
+    border-radius: 18px;
+}
+
+.card-status-waiting .spinner {
+    margin: 2px auto 10px;
+}
+
+.card-status-waiting span,
+.card-status-note {
+    color: var(--cinza);
+    font-size: 13px;
+}
+
+.card-status-order {
+    max-width: 420px;
+    margin: 14px auto;
+    padding: 15px 16px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    background: #fff;
+    border: 1px solid var(--borda);
+    border-radius: 14px;
+    text-align: left;
+}
+
+.card-status-order span {
+    color: var(--cinza);
+}
+
+@media (max-width: 600px) {
+    .card-payment-box {
+        padding: 10px;
+        margin-left: -2px;
+        margin-right: -2px;
+    }
+
+    #card-3ds-frame {
+        height: 460px;
+    }
+}
