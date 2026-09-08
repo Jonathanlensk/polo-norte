@@ -470,6 +470,10 @@ async function processarPagamento(metodo, dadosCartao = null) {
         estado.numeroPedido =
             resultado.orderNumber || gerarNumeroPedido();
 
+        if (resultado.delivery) {
+            estado.cotacaoEntrega = resultado.delivery;
+        }
+
         estado.processando = false;
 
         if (resultado.paymentMethod === "pix") {

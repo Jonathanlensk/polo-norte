@@ -9,6 +9,7 @@ const systemRoutes = require("./src/routes/system.routes");
 const authRoutes = require("./src/routes/auth.routes");
 const customerRoutes = require("./src/routes/customer.routes");
 const productsRoutes = require("./src/routes/products.routes");
+const deliveryRoutes = require("./src/routes/delivery.routes");
 const ordersRoutes = require("./src/routes/orders.routes");
 const customerOrdersRoutes = require("./src/routes/customer-orders.routes");
 
@@ -23,6 +24,7 @@ app.use(systemRoutes);
 app.use(authRoutes);
 app.use(customerRoutes);
 app.use(productsRoutes);
+app.use(deliveryRoutes);
 app.use(ordersRoutes);
 app.use(customerOrdersRoutes);
 

@@ -70,7 +70,7 @@ function confirmacao() {
                 </p>
 
                 <strong>
-                    ${CONFIG.entrega.previsao}
+                    ${previsaoEntregaAtual()}
                 </strong>
 
                 <p>

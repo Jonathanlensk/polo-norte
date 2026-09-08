@@ -85,7 +85,7 @@ if (req.customerId && enderecoId) {
     enderecoSalvo.rows[0].id;
 }
     const cart =
-       await calculateCart(itens, unidadeId);
+       await calculateCart(itens, unidadeId, endereco);
 
     if (metodo === "cartao" && Number(cart.total) < 0.50) {
       return res.status(400).json({
@@ -96,6 +96,21 @@ if (req.customerId && enderecoId) {
 
     const orderNumber =
       `PN-${Date.now().toString().slice(-8)}`;
+
+    const cardPaymentType =
+      metodo === "cartao"
+        ? String(pagamento?.payment_type_id || "")
+        : null;
+
+    if (
+      metodo === "cartao" &&
+      !["credit_card", "debit_card"].includes(cardPaymentType)
+    ) {
+      return res.status(400).json({
+        message:
+          "Selecione se o cartão será usado no crédito ou no débito."
+      });
+    }
 
     const paymentBody = {
       amount: cart.total.toFixed(2),
@@ -110,16 +125,16 @@ if (req.customerId && enderecoId) {
               id:
                 pagamento?.payment_method_id,
 
-              type:
-                pagamento?.payment_type_id ||
-                "credit_card",
+              type: cardPaymentType,
 
               token:
                 pagamento?.token,
 
-              // A loja aceita cartão somente à vista.
-              // O backend força 1x mesmo que o frontend seja manipulado.
-              installments: 1
+              ...(cardPaymentType === "credit_card" && {
+                // A loja aceita crédito somente à vista.
+                // O backend força 1x mesmo que o frontend seja manipulado.
+                installments: 1
+              })
             }
     };
 
@@ -153,16 +168,19 @@ if (req.customerId && enderecoId) {
           external_reference:
             orderNumber,
 
-          ...(metodo === "cartao" && {
-            config: {
-              online: {
-                transaction_security: {
-                  validation: "on_fraud_risk",
-                  liability_shift: "required"
+          ...(
+            metodo === "cartao" &&
+            cardPaymentType === "credit_card" && {
+              config: {
+                online: {
+                  transaction_security: {
+                    validation: "on_fraud_risk",
+                    liability_shift: "required"
+                  }
                 }
               }
             }
-          }),
+          ),
 
           transactions: {
             payments: [paymentBody]
@@ -193,7 +211,10 @@ await saveOrderToDatabase({
   payment,
   status,
   statusDetail,
-  metodo,
+  metodo:
+    metodo === "cartao"
+      ? cardPaymentType
+      : metodo,
   endereco,
   cart,
   customerId: req.customerId || null,
@@ -230,7 +251,10 @@ await saveOrderToDatabase({
         mpMethod.ticket_url || null,
 
       challengeUrl:
-        mpMethod.transaction_security?.url || null
+        mpMethod.transaction_security?.url || null,
+
+      delivery:
+        cart.entregaDetalhes || null
     });
 
   } catch (error) {

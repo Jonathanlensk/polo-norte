@@ -15,9 +15,8 @@ function subtotal() {
         }, 0);
 }
 
-// ENTREGA É GRÁTIS
 function totalPedido() {
-    return subtotal();
+    return subtotal() + taxaEntregaAtual();
 }
 
 function adicionar(id) {
@@ -86,6 +85,7 @@ function trocarUnidade() {
 
 function escolherUnidade(id) {
     estado.unidade = unidades.find(unidade => unidade.id === id);
+    invalidarCotacaoEntrega();
     estado.voltarCatalogoPara = null;
     estado.tela = "menu";
     render();
@@ -150,11 +150,25 @@ function alternarFavorito(event, id) {
 }
 
 function resumoPedido() {
+    const entregaCalculada = Boolean(estado.cotacaoEntrega);
+    const taxa = taxaEntregaAtual();
+
     return `
         <div class="resumo">
             <div class="linha">
                 <span>Subtotal (${quantidadeCarrinho()} itens)</span>
                 <span>${dinheiro(subtotal())}</span>
+            </div>
+
+            <div class="linha">
+                <span>Entrega</span>
+                <span>
+                    ${
+                        entregaCalculada
+                            ? (taxa > 0 ? dinheiro(taxa) : "Grátis")
+                            : "A calcular"
+                    }
+                </span>
             </div>
 
             <div class="linha total">
@@ -167,6 +181,10 @@ function resumoPedido() {
 
 function atualizarEndereco(campo, valor) {
     estado.endereco[campo] = valor;
+
+    if (["cep", "numero", "rua", "bairro", "cidade", "uf"].includes(campo)) {
+        invalidarCotacaoEntrega();
+    }
 
     if (estado.erros[campo]) {
         delete estado.erros[campo];
@@ -435,5 +453,5 @@ async function avancarEndereco() {
         return;
     }
 
-    ir("entrega");
+    await abrirEntregaComCotacao();
 }

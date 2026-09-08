@@ -3,6 +3,7 @@ const CONFIG = {
         orders: "/api/orders",
         config: "/api/config",
         products: "/api/products",
+        deliveryQuote: "/api/delivery/quote",
 
         register: "/api/auth/register",
         login: "/api/auth/login",
@@ -15,8 +16,7 @@ const CONFIG = {
     },
 
     entrega: {
-        gratuita: true,
-        previsao: "40–60 minutos"
+        previsao: "Calculando..."
     }
 };
 
@@ -183,6 +183,7 @@ const estado = {
     carrinho: {},
     favoritos: new Set(),
     pagamento: "pix",
+    tipoCartao: "credito",
     
     cliente: null,
     modoPerfil: "login",
@@ -224,6 +225,10 @@ const estado = {
     numeroPedido: null,
     pix: null,
     cartaoPagamento: null,
+
+    cotacaoEntrega: null,
+    carregandoEntrega: false,
+    erroEntrega: "",
 
     pedidos: [],
     pedidoSelecionado: null,

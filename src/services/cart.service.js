@@ -1,4 +1,5 @@
 const db = require("../../database/db");
+const { quoteDelivery } = require("./delivery.service");
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -25,7 +26,7 @@ const units = {
 // CARRINHO
 // =========================
 
-async function calculateCart(items, unitId) {
+async function calculateCart(items, unitId, deliveryAddress = null) {
   if (!Array.isArray(items) || !items.length) {
     throw new Error("Carrinho vazio.");
   }
@@ -105,14 +106,21 @@ async function calculateCart(items, unitId) {
     };
   });
 
-  const entrega = unit.taxa;
+  let entrega = unit.taxa;
+  let entregaDetalhes = null;
+
+  if (deliveryAddress) {
+    entregaDetalhes = await quoteDelivery(unitId, deliveryAddress);
+    entrega = entregaDetalhes.fee;
+  }
 
   return {
     itens,
     subtotal: money(subtotal),
     entrega: money(entrega),
     total: money(subtotal + entrega),
-    unidade: unit
+    unidade: unit,
+    entregaDetalhes
   };
 
 }

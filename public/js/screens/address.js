@@ -327,6 +327,7 @@ function obterEnderecoSelecionado() {
 function aplicarEnderecoSalvoNoCheckout(endereco) {
     if (!endereco) return;
 
+    invalidarCotacaoEntrega();
     estado.enderecoSelecionadoId = Number(endereco.id);
 
     estado.endereco = {
@@ -355,7 +356,7 @@ function aplicarEnderecoSalvoNoCheckout(endereco) {
     };
 }
 
-function selecionarEnderecoEntrega(id, mostrarAviso = true) {
+async function selecionarEnderecoEntrega(id, mostrarAviso = true) {
     const endereco = estado.enderecosSalvos.find(
         item => Number(item.id) === Number(id)
     );
@@ -365,16 +366,23 @@ function selecionarEnderecoEntrega(id, mostrarAviso = true) {
         return;
     }
 
+    const estavaNaEntrega = estado.tela === "entrega";
+
     aplicarEnderecoSalvoNoCheckout(endereco);
     fecharModalEnderecosEntrega();
-    render();
+
+    if (estavaNaEntrega) {
+        await abrirEntregaComCotacao();
+    } else {
+        render();
+    }
 
     if (mostrarAviso) {
         mostrarMensagem("Endereço de entrega alterado!");
     }
 }
 
-function continuarComEnderecoSalvo() {
+async function continuarComEnderecoSalvo() {
     const endereco = obterEnderecoSelecionado();
 
     if (!endereco) {
@@ -383,7 +391,7 @@ function continuarComEnderecoSalvo() {
     }
 
     aplicarEnderecoSalvoNoCheckout(endereco);
-    ir("entrega");
+    await abrirEntregaComCotacao();
 }
 
 function editarEnderecoPrincipal() {
