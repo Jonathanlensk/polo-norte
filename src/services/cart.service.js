@@ -1,5 +1,6 @@
 const db = require("../../database/db");
 const { quoteDelivery } = require("./delivery.service");
+const { ensureCatalogSchema, promotionCondition } = require("./catalog.service");
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -27,6 +28,7 @@ const units = {
 // =========================
 
 async function calculateCart(items, unitId, deliveryAddress = null) {
+  await ensureCatalogSchema();
   if (!Array.isArray(items) || !items.length) {
     throw new Error("Carrinho vazio.");
   }
@@ -43,17 +45,22 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
     throw new Error("Produto inválido no carrinho.");
   }
 
+  const promo = promotionCondition("p");
+
   const result = await db.query(
     `
       SELECT
-        id,
-        name,
-        price::float AS price,
-        stock_quantity,
-        active
-      FROM products
-      WHERE id = ANY($1::bigint[])
-        AND active = TRUE
+        p.id,
+        p.name,
+        CASE WHEN ${promo}
+          THEN p.promotion_price::float
+          ELSE p.price::float
+        END AS price,
+        p.stock_quantity,
+        p.active
+      FROM products p
+      WHERE p.id = ANY($1::bigint[])
+        AND p.active = TRUE
     `,
     [ids]
   );

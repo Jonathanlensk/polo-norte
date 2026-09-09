@@ -42,6 +42,44 @@ function render() {
     app.innerHTML = tela();
 }
 
+let atualizandoCatalogoCliente = false;
+
+async function atualizarCatalogoSilencioso() {
+    if (atualizandoCatalogoCliente) return;
+
+    atualizandoCatalogoCliente = true;
+
+    try {
+        await carregarProdutos();
+
+        // Só redesenha telas relacionadas ao catálogo para não interromper
+        // pagamento/endereço enquanto o cliente está preenchendo dados.
+        if (["menu", "carrinho", "favoritos"].includes(estado.tela)) {
+            render();
+        }
+    } catch (erro) {
+        console.warn("Não foi possível atualizar o catálogo em segundo plano:", erro);
+    } finally {
+        atualizandoCatalogoCliente = false;
+    }
+}
+
+window.addEventListener("focus", () => {
+    atualizarCatalogoSilencioso();
+});
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        atualizarCatalogoSilencioso();
+    }
+});
+
+setInterval(() => {
+    if (["menu", "carrinho", "favoritos"].includes(estado.tela)) {
+        atualizarCatalogoSilencioso();
+    }
+}, 20000);
+
 async function iniciarApp() {
     await Promise.all([
         carregarProdutos(),

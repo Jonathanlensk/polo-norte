@@ -1,4 +1,5 @@
 const db = require("../../database/db");
+const { ensureInventorySchema, reserveStockForOrder } = require("./inventory.service");
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -40,6 +41,7 @@ async function saveOrderToDatabase({
   customerId,
   customerAddressId
 }) {
+  await ensureInventorySchema();
   const client = await db.connect();
 
   try {
@@ -179,6 +181,14 @@ await client.query(
     approvedAt
   ]
 );
+
+    // Assim que o pedido é registrado, o estoque disponível é reservado.
+    // Isso impede novas compras acima da quantidade real e faz o painel
+    // administrativo refletir a venda imediatamente. Pedidos rejeitados
+    // ou cancelados não consomem estoque.
+    if (!["rejected", "cancelled"].includes(String(status))) {
+      await reserveStockForOrder(databaseOrderId, client);
+    }
 
     await client.query("COMMIT");
 

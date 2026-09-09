@@ -819,3 +819,14 @@
     max-width: 320px;
     margin: 0 auto;
 }
+
+/* Imagens cadastradas pelo gerente */
+.produto-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    border-radius: 12px;
+    padding: 4px;
+}
+.produto-img.cat-outros { background: linear-gradient(160deg, #eef4ff, #dfe9f8); }

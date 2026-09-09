@@ -1,4 +1,9 @@
 const db = require("../../database/db");
+const {
+  ensureInventorySchema,
+  reserveStockForOrder,
+  releaseStockForOrder
+} = require("./inventory.service");
 
 const MP_API = "https://api.mercadopago.com";
 
@@ -115,6 +120,8 @@ async function updateLocalOrder(
   status,
   statusDetail
 ) {
+  await ensureInventorySchema();
+
   const paymentId =
     payment?.id != null
       ? String(payment.id)
@@ -125,66 +132,82 @@ async function updateLocalOrder(
       ? new Date()
       : null;
 
-  // Atualiza o pedido
-  const result = await db.query(
-    `
-      UPDATE orders
-      SET
-        payment_status = $2,
-        payment_status_detail = $3,
-        mercado_pago_payment_id =
-          COALESCE($4, mercado_pago_payment_id),
-        updated_at = NOW()
-      WHERE mercado_pago_order_id = $1
-      RETURNING
-        id,
-        order_number AS "orderNumber",
-        mercado_pago_order_id AS "mercadoPagoOrderId",
-        mercado_pago_payment_id AS "mercadoPagoPaymentId",
-        payment_status AS status,
-        payment_status_detail AS "statusDetail",
-        test_approved AS "testApproved"
-    `,
-    [
-      String(orderId),
-      String(status),
-      statusDetail ? String(statusDetail) : null,
-      paymentId
-    ]
-  );
+  const client = await db.connect();
 
-  const order = result.rows[0];
+  try {
+    await client.query("BEGIN");
 
-  if (!order) {
-    return null;
+    const result = await client.query(
+      `
+        UPDATE orders
+        SET
+          payment_status = $2,
+          payment_status_detail = $3,
+          mercado_pago_payment_id =
+            COALESCE($4, mercado_pago_payment_id),
+          updated_at = NOW()
+        WHERE mercado_pago_order_id = $1
+        RETURNING
+          id,
+          order_number AS "orderNumber",
+          mercado_pago_order_id AS "mercadoPagoOrderId",
+          mercado_pago_payment_id AS "mercadoPagoPaymentId",
+          payment_status AS status,
+          payment_status_detail AS "statusDetail",
+          test_approved AS "testApproved"
+      `,
+      [
+        String(orderId),
+        String(status),
+        statusDetail ? String(statusDetail) : null,
+        paymentId
+      ]
+    );
+
+    const order = result.rows[0];
+
+    if (!order) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    await client.query(
+      `
+        UPDATE payments
+        SET
+          external_payment_id =
+            COALESCE($2, external_payment_id),
+          status = $3,
+          approved_at =
+            COALESCE($4, approved_at),
+          updated_at = NOW()
+        WHERE order_id = $1
+      `,
+      [
+        order.id,
+        paymentId,
+        String(status),
+        approvedAt
+      ]
+    );
+
+    // Compatibilidade com pedidos antigos e atualização em tempo real:
+    // aprovado = garante a baixa de estoque uma única vez;
+    // rejeitado/cancelado = devolve uma reserva existente.
+    if (status === "approved") {
+      await reserveStockForOrder(order.id, client);
+    } else if (["rejected", "cancelled"].includes(String(status))) {
+      await releaseStockForOrder(order.id, client);
+    }
+
+    await client.query("COMMIT");
+    return order;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  // Atualiza o pagamento
-  await db.query(
-    `
-      UPDATE payments
-      SET
-        external_payment_id =
-          COALESCE($2, external_payment_id),
-
-        status = $3,
-
-        approved_at =
-          COALESCE($4, approved_at),
-
-        updated_at = NOW()
-
-      WHERE order_id = $1
-    `,
-    [
-      order.id,
-      paymentId,
-      String(status),
-      approvedAt
-    ]
-  );
-
-  return order;
 }
 
 module.exports = {

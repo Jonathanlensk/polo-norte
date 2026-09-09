@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const db = require("../../database/db");
 const { identificarClienteOpcional } = require("../middleware/auth.middleware");
 const { calculateCart } = require("../services/cart.service");
+const { ensureInventorySchema, reserveStockForOrder } = require("../services/inventory.service");
 const { findOrder, saveOrderToDatabase } = require("../services/order.service");
 const {
   mpRequest,
@@ -460,6 +461,9 @@ router.post(
         `,
         [order.id]
       );
+
+      await ensureInventorySchema();
+      await reserveStockForOrder(order.id);
 
       console.log(
         "PAGAMENTO SIMULADO COMO APROVADO:",

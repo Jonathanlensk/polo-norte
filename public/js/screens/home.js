@@ -1,3 +1,29 @@
+function imagemProdutoHtml(produto) {
+    const url = String(produto.imagem || "").trim();
+
+    if (!url || !(url.startsWith("/") || url.startsWith("https://"))) {
+        return produto.emoji;
+    }
+
+    const safeUrl = url
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+
+    return `
+        <img
+            src="${safeUrl}"
+            alt="${String(produto.nome || "Produto")
+                .replaceAll("&", "&amp;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")}"
+            loading="lazy"
+        >
+    `;
+}
+
 function home() {
     return `
         <section class="hero">
@@ -126,7 +152,7 @@ function cardProduto(produto) {
             <div
                 class="produto-img ${classeCategoria(produto.categoria)}"
             >
-                ${produto.emoji}
+                ${imagemProdutoHtml(produto)}
             </div>
 
             <h3>${produto.nome}</h3>

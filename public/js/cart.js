@@ -49,6 +49,10 @@ function excluirProduto(id) {
 function ir(tela) {
     estado.tela = tela;
     render();
+
+    if (["menu", "favoritos"].includes(tela)) {
+        atualizarCatalogoSilencioso?.();
+    }
 }
 
 function irInicio() {
@@ -62,6 +66,7 @@ function irInicio() {
 
     estado.tela = "menu";
     render();
+    atualizarCatalogoSilencioso?.();
 }
 
 function voltarCatalogo() {
@@ -89,6 +94,7 @@ function escolherUnidade(id) {
     estado.voltarCatalogoPara = null;
     estado.tela = "menu";
     render();
+    atualizarCatalogoSilencioso?.();
 }
 
 function emBreve() {

@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS products (
 
     image_url TEXT,
 
+    -- Promoção opcional. O preço normal continua em price.
+    promotion_price NUMERIC(10,2)
+        CHECK (promotion_price IS NULL OR promotion_price >= 0),
+
+    promotion_active BOOLEAN NOT NULL DEFAULT FALSE,
+    promotion_starts_at TIMESTAMPTZ,
+    promotion_ends_at TIMESTAMPTZ,
+
     -- FALSE = produto não aparece para compra
     active BOOLEAN NOT NULL DEFAULT TRUE,
 
@@ -113,6 +121,34 @@ ON products(active);
 
 CREATE INDEX IF NOT EXISTS idx_products_category
 ON products(category);
+
+
+-- =========================================================
+-- CATEGORIAS DE PRODUTOS
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS product_categories (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_product_categories_name_unique
+ON product_categories (LOWER(name));
+
+INSERT INTO product_categories (name)
+SELECT DISTINCT TRIM(category)
+FROM products p
+WHERE p.category IS NOT NULL
+  AND TRIM(p.category) <> ''
+  AND NOT EXISTS (
+      SELECT 1
+      FROM product_categories c
+      WHERE LOWER(c.name) = LOWER(TRIM(p.category))
+  );
 
 
 -- =========================================================
@@ -169,6 +205,11 @@ CREATE TABLE IF NOT EXISTS orders (
     -- Mantemos aqui também para facilitar integração
     -- com o fluxo atual do Mercado Pago.
     mercado_pago_payment_id VARCHAR(100),
+
+    -- Controle de baixa/devolução de estoque do pedido.
+    -- A reserva impede que o mesmo pedido desconte estoque duas vezes.
+    stock_reserved_at TIMESTAMPTZ,
+    stock_released_at TIMESTAMPTZ,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -378,6 +419,16 @@ ON products;
 
 CREATE TRIGGER trigger_products_updated_at
 BEFORE UPDATE ON products
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+
+-- CATEGORIAS DE PRODUTOS
+DROP TRIGGER IF EXISTS trigger_product_categories_updated_at
+ON product_categories;
+
+CREATE TRIGGER trigger_product_categories_updated_at
+BEFORE UPDATE ON product_categories
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 

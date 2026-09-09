@@ -12,12 +12,13 @@ const productsRoutes = require("./src/routes/products.routes");
 const deliveryRoutes = require("./src/routes/delivery.routes");
 const ordersRoutes = require("./src/routes/orders.routes");
 const customerOrdersRoutes = require("./src/routes/customer-orders.routes");
+const adminRoutes = require("./src/routes/admin.routes");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
 
 app.use(systemRoutes);
@@ -27,6 +28,7 @@ app.use(productsRoutes);
 app.use(deliveryRoutes);
 app.use(ordersRoutes);
 app.use(customerOrdersRoutes);
+app.use(adminRoutes);
 
 app.use(express.static(path.join(__dirname, "public")));
 

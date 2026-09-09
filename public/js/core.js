@@ -95,15 +95,18 @@ const unidades = [
     }
 ];
 
-const categoriasInfo = {
-    Todos: { icone: "presente" },
-    Cervejas: { icone: "caneca" },
-    Destilados: { icone: "garrafa" },
-    Vinhos: { icone: "taca" },
-    Refrigerantes: { icone: "lata" },
-    Energéticos: { icone: "raio" },
-    Águas: { icone: "gota" },
-    Gelo: { icone: "floco" }
+const iconesCategoriasConhecidas = {
+    Cervejas: "caneca",
+    Destilados: "garrafa",
+    Vinhos: "taca",
+    Refrigerantes: "lata",
+    Energéticos: "raio",
+    Águas: "gota",
+    Gelo: "floco"
+};
+
+let categoriasInfo = {
+    Todos: { icone: "presente" }
 };
 
 const classesCategoria = {
@@ -117,7 +120,7 @@ const classesCategoria = {
 };
 
 function classeCategoria(categoria) {
-    return classesCategoria[categoria] || "cat-cervejas";
+    return classesCategoria[categoria] || "cat-outros";
 }
 
 let produtos = [];
@@ -133,12 +136,12 @@ function emojiProduto(categoria) {
         Gelo: "🧊"
     };
 
-    return emojis[categoria] || "🥤";
+    return emojis[categoria] || "🛍️";
 }
 
 async function carregarProdutos() {
     try {
-        const resposta = await fetch(CONFIG.api.products);
+        const resposta = await fetch(CONFIG.api.products, { cache: "no-store" });
 
         const resultado = await resposta.json();
 
@@ -154,10 +157,31 @@ async function carregarProdutos() {
 
             id: Number(produto.id),
             preco: Number(produto.preco),
+            precoOriginal: produto.precoOriginal == null
+                ? null
+                : Number(produto.precoOriginal),
             estoque: Number(produto.estoque),
 
             emoji: emojiProduto(produto.categoria)
         }));
+
+        const categoriasDoBanco = Array.isArray(resultado.categories)
+            ? resultado.categories
+            : [...new Set(produtos.map(produto => produto.categoria).filter(Boolean))];
+
+        categoriasInfo = {
+            Todos: { icone: "presente" }
+        };
+
+        categoriasDoBanco.forEach(categoria => {
+            categoriasInfo[categoria] = {
+                icone: iconesCategoriasConhecidas[categoria] || "presente"
+            };
+        });
+
+        if (!categoriasInfo[estado.categoria]) {
+            estado.categoria = "Todos";
+        }
 
         console.log(
             "PRODUTOS CARREGADOS DO BANCO:",
