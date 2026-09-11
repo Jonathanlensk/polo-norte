@@ -830,3 +830,40 @@
     padding: 4px;
 }
 .produto-img.cat-outros { background: linear-gradient(160deg, #eef4ff, #dfe9f8); }
+
+/* =========================================================
+   DISPONIBILIDADE POR UNIDADE
+   ========================================================= */
+.produto.produto-indisponivel {
+    opacity: .68;
+}
+
+.produto.produto-indisponivel .produto-img {
+    filter: grayscale(.35);
+}
+
+.produto-indisponivel-label,
+.produto-estoque-baixo {
+    display: inline-block;
+    margin-top: 7px;
+    padding: 4px 7px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    font-weight: 800;
+}
+
+.produto-indisponivel-label {
+    color: #8a3d3d;
+    background: #fdecec;
+}
+
+.produto-estoque-baixo {
+    color: #8a5a00;
+    background: #fff3cd;
+}
+
+.produto .add:disabled {
+    cursor: not-allowed;
+    opacity: .45;
+    box-shadow: none;
+}

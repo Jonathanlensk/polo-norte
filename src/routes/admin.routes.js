@@ -7,7 +7,9 @@ const { randomUUID } = require("crypto");
 const {
   ensureCatalogSchema,
   ensureCategory,
+  updateCategoryIcon,
   listActiveCategories,
+  isCategoryIconKey,
   promotionCondition
 } = require("../services/catalog.service");
 const {
@@ -18,6 +20,23 @@ const {
   exigirGerente,
   normalizarPerfilAdmin
 } = require("../middleware/admin-auth.middleware");
+const {
+  ensureAdminSchema,
+  normalizeLogin,
+  isValidLogin,
+  mapAdminUser
+} = require("../services/admin-users.service");
+const {
+  getStoreSettings,
+  updateStoreSettings
+} = require("../services/store-settings.service");
+const {
+  STORE_UNITS,
+  ensureStoreInventorySchema,
+  normalizeProductInventory,
+  setProductInventory,
+  updateProductUnitInventory
+} = require("../services/store-inventory.service");
 
 const router = express.Router();
 
@@ -28,10 +47,16 @@ const ORDER_STATUSES = new Set([
   "delivered"
 ]);
 
+function storeUnitName(unitId) {
+  return STORE_UNITS.find((unit) => unit.id === unitId)?.name || null;
+}
+
 function mapOrder(row) {
   return {
     id: Number(row.id),
     orderNumber: row.order_number,
+    unitId: row.unit_id || null,
+    unitName: storeUnitName(row.unit_id),
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     customerEmail: row.customer_email || null,
@@ -51,26 +76,26 @@ function mapOrder(row) {
 
 router.post("/api/admin/auth/login", async (req, res) => {
   try {
-    const email = String(req.body?.email || "")
-      .trim()
-      .toLowerCase();
+    await ensureAdminSchema();
+
+    const login = normalizeLogin(req.body?.login);
     const senha = String(req.body?.senha || "");
 
-    if (!email || !senha) {
+    if (!login || !senha) {
       return res.status(400).json({
         ok: false,
-        message: "Informe e-mail e senha."
+        message: "Informe matrícula e senha."
       });
     }
 
     const result = await db.query(
       `
-        SELECT id, name, email, password_hash, role, active
+        SELECT id, name, login, email, password_hash, role, unit_id, active
         FROM admins
-        WHERE LOWER(email) = LOWER($1)
+        WHERE UPPER(login) = UPPER($1)
         LIMIT 1
       `,
-      [email]
+      [login]
     );
 
     const admin = result.rows[0];
@@ -78,26 +103,23 @@ router.post("/api/admin/auth/login", async (req, res) => {
     if (!admin) {
       return res.status(401).json({
         ok: false,
-        message: "E-mail ou senha incorretos."
+        message: "Matrícula ou senha incorretas."
       });
     }
 
     if (!admin.active) {
       return res.status(403).json({
         ok: false,
-        message: "Este administrador está desativado."
+        message: "Este acesso administrativo está desativado."
       });
     }
 
-    const senhaCorreta = await bcrypt.compare(
-      senha,
-      admin.password_hash
-    );
+    const senhaCorreta = await bcrypt.compare(senha, admin.password_hash);
 
     if (!senhaCorreta) {
       return res.status(401).json({
         ok: false,
-        message: "E-mail ou senha incorretos."
+        message: "Matrícula ou senha incorretas."
       });
     }
 
@@ -114,8 +136,11 @@ router.post("/api/admin/auth/login", async (req, res) => {
       admin: {
         id: Number(admin.id),
         name: admin.name,
-        email: admin.email,
-        role: normalizarPerfilAdmin(admin.role)
+        login: admin.login,
+        email: admin.email || null,
+        role: normalizarPerfilAdmin(admin.role),
+        unitId: admin.unit_id || null,
+        unitName: storeUnitName(admin.unit_id)
       }
     });
   } catch (error) {
@@ -129,9 +154,11 @@ router.post("/api/admin/auth/login", async (req, res) => {
 
 router.get("/api/admin/auth/me", autenticarAdmin, async (req, res) => {
   try {
+    await ensureAdminSchema();
+
     const result = await db.query(
       `
-        SELECT id, name, email, role, active
+        SELECT id, name, login, email, role, unit_id, active
         FROM admins
         WHERE id = $1
         LIMIT 1
@@ -154,8 +181,11 @@ router.get("/api/admin/auth/me", autenticarAdmin, async (req, res) => {
       admin: {
         id: Number(admin.id),
         name: admin.name,
-        email: admin.email,
-        role: normalizarPerfilAdmin(admin.role)
+        login: admin.login,
+        email: admin.email || null,
+        role: normalizarPerfilAdmin(admin.role),
+        unitId: admin.unit_id || null,
+        unitName: storeUnitName(admin.unit_id)
       }
     });
   } catch (error) {
@@ -173,21 +203,270 @@ router.post("/api/admin/auth/logout", (req, res) => {
 });
 
 router.get(
+  "/api/admin/manager/settings",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      const settings = await getStoreSettings();
+      return res.json({ ok: true, settings });
+    } catch (error) {
+      console.error("GET /api/admin/manager/settings:", error);
+      return res.status(500).json({ ok: false, message: "Erro ao carregar as configurações da loja." });
+    }
+  }
+);
+
+router.put(
+  "/api/admin/manager/settings",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      const settings = await updateStoreSettings(req.body || {});
+      return res.json({ ok: true, settings, message: "Configurações salvas com sucesso." });
+    } catch (error) {
+      console.error("PUT /api/admin/manager/settings:", error);
+      return res.status(error.status || 500).json({
+        ok: false,
+        message: error.status ? error.message : "Erro ao salvar as configurações."
+      });
+    }
+  }
+);
+
+router.get(
+  "/api/admin/manager/users",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      await ensureAdminSchema();
+      const result = await db.query(`
+        SELECT id, name, login, email, role, unit_id, active, last_login_at, created_at
+        FROM admins
+        ORDER BY active DESC, name ASC, id ASC
+      `);
+      return res.json({ ok: true, users: result.rows.map(mapAdminUser) });
+    } catch (error) {
+      console.error("GET /api/admin/manager/users:", error);
+      return res.status(500).json({ ok: false, message: "Erro ao carregar os usuários administrativos." });
+    }
+  }
+);
+
+router.post(
+  "/api/admin/manager/users",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      await ensureAdminSchema();
+
+      const name = String(req.body?.name || "").trim();
+      const login = normalizeLogin(req.body?.login);
+      const email = String(req.body?.email || "").trim().toLowerCase() || null;
+      const role = normalizarPerfilAdmin(req.body?.role);
+      const requestedUnitId = String(req.body?.unitId || "").trim();
+      const unitId = role === "operator" ? requestedUnitId : null;
+      const senha = String(req.body?.senha || "");
+
+      if (name.length < 2 || name.length > 150) {
+        return res.status(400).json({ ok: false, message: "Informe um nome válido." });
+      }
+      if (!isValidLogin(login)) {
+        return res.status(400).json({
+          ok: false,
+          message: "A matrícula deve ter de 2 a 30 caracteres e usar apenas letras, números, ponto, hífen ou underline."
+        });
+      }
+      if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+        return res.status(400).json({ ok: false, message: "Informe um e-mail válido ou deixe em branco." });
+      }
+      if (role === "operator" && !STORE_UNITS.some((unit) => unit.id === unitId)) {
+        return res.status(400).json({ ok: false, message: "Selecione a unidade do operador." });
+      }
+      if (senha.length < 8) {
+        return res.status(400).json({ ok: false, message: "A senha deve ter pelo menos 8 caracteres." });
+      }
+
+      const duplicate = await db.query(
+        `
+          SELECT id
+          FROM admins
+          WHERE UPPER(login) = UPPER($1)
+             OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))
+          LIMIT 1
+        `,
+        [login, email]
+      );
+
+      if (duplicate.rows.length) {
+        return res.status(409).json({ ok: false, message: "Já existe um usuário com esta matrícula ou e-mail." });
+      }
+
+      const passwordHash = await bcrypt.hash(senha, 12);
+      const result = await db.query(
+        `
+          INSERT INTO admins (name, login, email, password_hash, role, unit_id, active)
+          VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+          RETURNING id, name, login, email, role, unit_id, active, last_login_at, created_at
+        `,
+        [name, login, email, passwordHash, role, unitId]
+      );
+
+      return res.status(201).json({ ok: true, user: mapAdminUser(result.rows[0]) });
+    } catch (error) {
+      console.error("POST /api/admin/manager/users:", error);
+      return res.status(error.code === "23505" ? 409 : 500).json({
+        ok: false,
+        message: error.code === "23505"
+          ? "Já existe um usuário com esta matrícula ou e-mail."
+          : "Erro ao criar o usuário administrativo."
+      });
+    }
+  }
+);
+
+router.patch(
+  "/api/admin/manager/users/:id",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      await ensureAdminSchema();
+
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ ok: false, message: "Usuário inválido." });
+      }
+
+      const currentResult = await db.query(
+        `SELECT id, name, login, email, role, unit_id, active FROM admins WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      const current = currentResult.rows[0];
+
+      if (!current) {
+        return res.status(404).json({ ok: false, message: "Usuário não encontrado." });
+      }
+
+      const name = String(req.body?.name ?? current.name).trim();
+      const login = normalizeLogin(req.body?.login ?? current.login);
+      const emailRaw = req.body?.email === undefined ? current.email : req.body.email;
+      const email = String(emailRaw || "").trim().toLowerCase() || null;
+      const role = req.body?.role === undefined
+        ? normalizarPerfilAdmin(current.role)
+        : normalizarPerfilAdmin(req.body.role);
+      const requestedUnitId = req.body?.unitId === undefined
+        ? String(current.unit_id || "").trim()
+        : String(req.body.unitId || "").trim();
+      const unitId = role === "operator" ? requestedUnitId : null;
+      const active = req.body?.active === undefined ? Boolean(current.active) : Boolean(req.body.active);
+
+      if (name.length < 2 || name.length > 150) {
+        return res.status(400).json({ ok: false, message: "Informe um nome válido." });
+      }
+      if (!isValidLogin(login)) {
+        return res.status(400).json({ ok: false, message: "Matrícula inválida." });
+      }
+      if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+        return res.status(400).json({ ok: false, message: "E-mail inválido." });
+      }
+      if (role === "operator" && !STORE_UNITS.some((unit) => unit.id === unitId)) {
+        return res.status(400).json({ ok: false, message: "Selecione a unidade do operador." });
+      }
+
+      if (String(req.adminId) === String(id)) {
+        if (!active) {
+          return res.status(400).json({ ok: false, message: "Você não pode desativar o próprio acesso." });
+        }
+        if (role !== "manager") {
+          return res.status(400).json({ ok: false, message: "Você não pode remover o próprio perfil de gerente." });
+        }
+      }
+
+      const result = await db.query(
+        `
+          UPDATE admins
+          SET name = $1, login = $2, email = $3, role = $4, unit_id = $5, active = $6, updated_at = NOW()
+          WHERE id = $7
+          RETURNING id, name, login, email, role, unit_id, active, last_login_at, created_at
+        `,
+        [name, login, email, role, unitId, active, id]
+      );
+
+      return res.json({ ok: true, user: mapAdminUser(result.rows[0]) });
+    } catch (error) {
+      console.error("PATCH /api/admin/manager/users/:id:", error);
+      return res.status(error.code === "23505" ? 409 : (error.status || 500)).json({
+        ok: false,
+        message: error.code === "23505"
+          ? "Já existe outro usuário com esta matrícula ou e-mail."
+          : (error.status ? error.message : "Erro ao atualizar o usuário.")
+      });
+    }
+  }
+);
+
+router.patch(
+  "/api/admin/manager/users/:id/password",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      await ensureAdminSchema();
+      const id = Number(req.params.id);
+      const senha = String(req.body?.senha || "");
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ ok: false, message: "Usuário inválido." });
+      }
+      if (senha.length < 8) {
+        return res.status(400).json({ ok: false, message: "A nova senha deve ter pelo menos 8 caracteres." });
+      }
+
+      const passwordHash = await bcrypt.hash(senha, 12);
+      const result = await db.query(
+        `UPDATE admins SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING id`,
+        [passwordHash, id]
+      );
+
+      if (!result.rows.length) {
+        return res.status(404).json({ ok: false, message: "Usuário não encontrado." });
+      }
+
+      return res.json({ ok: true, message: "Senha redefinida com sucesso." });
+    } catch (error) {
+      console.error("PATCH /api/admin/manager/users/:id/password:", error);
+      return res.status(500).json({ ok: false, message: "Erro ao redefinir a senha." });
+    }
+  }
+);
+
+router.get(
   "/api/admin/manager/overview",
   autenticarAdmin,
   exigirGerente,
   async (req, res) => {
     try {
-      await ensureCatalogSchema();
+      await Promise.all([
+        ensureCatalogSchema(),
+        ensureStoreInventorySchema()
+      ]);
 
       const [productResult, categoryResult] = await Promise.all([
         db.query(`
           SELECT
-            COUNT(*) FILTER (WHERE active = TRUE)::int AS active_products,
-            COUNT(*) FILTER (
-              WHERE active = TRUE AND stock_quantity <= 5
-            )::int AS low_stock
-          FROM products
+            (SELECT COUNT(*)::int FROM products WHERE active = TRUE) AS active_products,
+            (
+              SELECT COUNT(*)::int
+              FROM store_product_stock s
+              JOIN products p ON p.id = s.product_id
+              WHERE p.active = TRUE
+                AND s.active = TRUE
+                AND s.stock_quantity <= 5
+            ) AS low_stock
         `),
         db.query(`
           SELECT COUNT(*)::int AS categories
@@ -219,11 +498,23 @@ router.get(
 
 router.get("/api/admin/orders", autenticarAdmin, async (req, res) => {
   try {
+    await ensureStoreInventorySchema();
     const status = String(req.query?.status || "").trim();
     const search = String(req.query?.search || "").trim();
 
     const params = [];
     const where = [];
+
+    if (req.adminRole === "operator") {
+      if (!req.adminUnitId || !STORE_UNITS.some((unit) => unit.id === req.adminUnitId)) {
+        return res.status(403).json({
+          ok: false,
+          message: "Este operador ainda não possui uma unidade vinculada. Peça ao gerente para definir a unidade em Usuários."
+        });
+      }
+      params.push(req.adminUnitId);
+      where.push(`o.unit_id = $${params.length}`);
+    }
 
     if (status && ORDER_STATUSES.has(status)) {
       params.push(status);
@@ -244,6 +535,7 @@ router.get("/api/admin/orders", autenticarAdmin, async (req, res) => {
         SELECT
           o.id,
           o.order_number,
+          o.unit_id,
           o.customer_name,
           o.customer_phone,
           o.customer_email,
@@ -268,6 +560,13 @@ router.get("/api/admin/orders", autenticarAdmin, async (req, res) => {
       `,
       params
     );
+
+    const summaryParams = [];
+    let summaryScope = "";
+    if (req.adminRole === "operator") {
+      summaryParams.push(req.adminUnitId);
+      summaryScope = `WHERE o.unit_id = $1`;
+    }
 
     const summaryResult = await db.query(`
       WITH limites_dia AS (
@@ -308,7 +607,8 @@ router.get("/api/admin/orders", autenticarAdmin, async (req, res) => {
         )::int AS delivered
       FROM orders o
       CROSS JOIN limites_dia l
-    `);
+      ${summaryScope}
+    `, summaryParams);
 
     return res.json({
       ok: true,
@@ -338,11 +638,23 @@ router.get(
   autenticarAdmin,
   async (req, res) => {
     try {
+      await ensureStoreInventorySchema();
+      if (req.adminRole === "operator" && (!req.adminUnitId || !STORE_UNITS.some((unit) => unit.id === req.adminUnitId))) {
+        return res.status(403).json({ ok: false, message: "Operador sem unidade vinculada." });
+      }
+
+      const orderParams = [req.params.orderNumber];
+      const unitScope = req.adminRole === "operator"
+        ? `AND unit_id = $2`
+        : "";
+      if (req.adminRole === "operator") orderParams.push(req.adminUnitId);
+
       const orderResult = await db.query(
         `
           SELECT
             id,
             order_number,
+            unit_id,
             customer_name,
             customer_phone,
             customer_email,
@@ -359,9 +671,10 @@ router.get(
             updated_at
           FROM orders
           WHERE order_number = $1
+            ${unitScope}
           LIMIT 1
         `,
-        [req.params.orderNumber]
+        orderParams
       );
 
       if (!orderResult.rows.length) {
@@ -427,7 +740,7 @@ router.patch(
 
       const currentResult = await db.query(
         `
-          SELECT id, payment_status, order_status
+          SELECT id, unit_id, payment_status, order_status
           FROM orders
           WHERE order_number = $1
           LIMIT 1
@@ -443,6 +756,15 @@ router.patch(
       }
 
       const current = currentResult.rows[0];
+
+      if (req.adminRole === "operator") {
+        if (!req.adminUnitId || current.unit_id !== req.adminUnitId) {
+          return res.status(403).json({
+            ok: false,
+            message: "Você só pode atualizar pedidos da sua unidade."
+          });
+        }
+      }
 
       if (
         orderStatus !== "received" &&
@@ -566,13 +888,31 @@ function promotionRunningFromRow(row) {
 }
 
 function mapManagerProduct(row) {
+  const rawUnitStock = row.unit_stock && typeof row.unit_stock === "object"
+    ? row.unit_stock
+    : {};
+
+  const unitStock = Object.fromEntries(
+    STORE_UNITS.map((unit) => {
+      const entry = rawUnitStock[unit.id] || {};
+      return [unit.id, {
+        stockQuantity: Number(entry.stockQuantity ?? entry.stock_quantity ?? 0),
+        active: entry.active !== false
+      }];
+    })
+  );
+
   return {
     id: Number(row.id),
     name: row.name,
     description: row.description || "",
     category: row.category || "",
     price: Number(row.price),
-    stockQuantity: Number(row.stock_quantity || 0),
+    stockQuantity: Object.values(unitStock).reduce(
+      (total, entry) => total + Number(entry.stockQuantity || 0),
+      0
+    ),
+    unitStock,
     imageUrl: row.image_url || null,
     active: Boolean(row.active),
     promotionPrice: row.promotion_price == null ? null : Number(row.promotion_price),
@@ -646,7 +986,10 @@ router.get(
   exigirGerente,
   async (req, res) => {
     try {
-      await ensureCatalogSchema();
+      await Promise.all([
+        ensureCatalogSchema(),
+        ensureStoreInventorySchema()
+      ]);
       const promo = promotionCondition("p");
 
       const result = await db.query(`
@@ -657,6 +1000,17 @@ router.get(
           p.category,
           p.price,
           p.stock_quantity,
+          COALESCE((
+            SELECT jsonb_object_agg(
+              s.store_id,
+              jsonb_build_object(
+                'stockQuantity', s.stock_quantity,
+                'active', s.active
+              )
+            )
+            FROM store_product_stock s
+            WHERE s.product_id = p.id
+          ), '{}'::jsonb) AS unit_stock,
           p.image_url,
           p.active,
           p.promotion_price,
@@ -693,13 +1047,16 @@ router.post(
   exigirGerente,
   async (req, res) => {
     try {
-      await ensureCatalogSchema();
+      await Promise.all([
+        ensureCatalogSchema(),
+        ensureStoreInventorySchema()
+      ]);
 
       const name = String(req.body?.name || "").trim();
       const description = String(req.body?.description || "").trim();
       const category = String(req.body?.category || "").trim();
       const price = parseMoney(req.body?.price, "Preço");
-      const stockQuantity = parseStock(req.body?.stockQuantity ?? 0);
+      const unitStock = normalizeProductInventory(req.body?.unitStock || {});
       const active = req.body?.active !== false;
 
       if (!name) {
@@ -737,7 +1094,7 @@ router.post(
           description || null,
           category,
           price,
-          stockQuantity,
+          0,
           imageUrl,
           active,
           promotion.promotionPrice,
@@ -747,9 +1104,14 @@ router.post(
         ]
       );
 
+      await setProductInventory(result.rows[0].id, unitStock);
+
       return res.status(201).json({
         ok: true,
-        product: mapManagerProduct(result.rows[0])
+        product: mapManagerProduct({
+          ...result.rows[0],
+          unit_stock: unitStock
+        })
       });
     } catch (error) {
       console.error("POST /api/admin/manager/products:", error);
@@ -767,7 +1129,10 @@ router.put(
   exigirGerente,
   async (req, res) => {
     try {
-      await ensureCatalogSchema();
+      await Promise.all([
+        ensureCatalogSchema(),
+        ensureStoreInventorySchema()
+      ]);
 
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
@@ -788,7 +1153,7 @@ router.put(
       const description = String(req.body?.description || "").trim();
       const category = String(req.body?.category || "").trim();
       const price = parseMoney(req.body?.price, "Preço");
-      const stockQuantity = parseStock(req.body?.stockQuantity ?? 0);
+      const unitStock = normalizeProductInventory(req.body?.unitStock || {});
       const active = req.body?.active !== false;
 
       if (!name) {
@@ -840,7 +1205,7 @@ router.put(
           description || null,
           category,
           price,
-          stockQuantity,
+          0,
           imageUrl,
           active,
           promotion.promotionPrice,
@@ -855,9 +1220,14 @@ router.put(
         await removeLocalProductImage(oldImageToRemove);
       }
 
+      await setProductInventory(id, unitStock);
+
       return res.json({
         ok: true,
-        product: mapManagerProduct(result.rows[0])
+        product: mapManagerProduct({
+          ...result.rows[0],
+          unit_stock: unitStock
+        })
       });
     } catch (error) {
       console.error("PUT /api/admin/manager/products/:id:", error);
@@ -875,33 +1245,25 @@ router.patch(
   exigirGerente,
   async (req, res) => {
     try {
-      await ensureCatalogSchema();
+      await ensureStoreInventorySchema();
       const id = Number(req.params.id);
 
       if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json({ ok: false, message: "Produto inválido." });
       }
 
-      const stockQuantity = parseStock(req.body?.stockQuantity);
-
-      const result = await db.query(
-        `
-          UPDATE products
-          SET stock_quantity = $1, updated_at = NOW()
-          WHERE id = $2
-          RETURNING id, stock_quantity
-        `,
-        [stockQuantity, id]
+      const inventory = await updateProductUnitInventory(
+        id,
+        req.body?.unitId,
+        {
+          stockQuantity: req.body?.stockQuantity,
+          active: req.body?.active !== false
+        }
       );
-
-      if (!result.rows.length) {
-        return res.status(404).json({ ok: false, message: "Produto não encontrado." });
-      }
 
       return res.json({
         ok: true,
-        id: Number(result.rows[0].id),
-        stockQuantity: Number(result.rows[0].stock_quantity)
+        ...inventory
       });
     } catch (error) {
       console.error("PATCH /api/admin/manager/products/:id/stock:", error);
@@ -935,6 +1297,7 @@ router.post(
   async (req, res) => {
     try {
       const name = String(req.body?.name || "").trim();
+      const icon = String(req.body?.icon || "").trim().toLowerCase();
 
       if (name.length < 2 || name.length > 100) {
         return res.status(400).json({
@@ -943,13 +1306,21 @@ router.post(
         });
       }
 
-      const category = await ensureCategory(name);
+      if (!isCategoryIconKey(icon)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Escolha um ícone para a categoria."
+        });
+      }
+
+      const category = await ensureCategory(name, icon);
 
       return res.status(201).json({
         ok: true,
         category: {
           id: Number(category.id),
           name: category.name,
+          icon: category.icon_key || icon,
           active: true,
           sortOrder: Number(category.sort_order || 0)
         }
@@ -957,6 +1328,33 @@ router.post(
     } catch (error) {
       console.error("POST /api/admin/manager/categories:", error);
       return res.status(500).json({ ok: false, message: "Erro ao criar a categoria." });
+    }
+  }
+);
+
+router.patch(
+  "/api/admin/manager/categories/:id/icon",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      const icon = String(req.body?.icon || "").trim().toLowerCase();
+
+      if (!isCategoryIconKey(icon)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Selecione um ícone válido para a categoria."
+        });
+      }
+
+      const category = await updateCategoryIcon(req.params.id, icon);
+      return res.json({ ok: true, category });
+    } catch (error) {
+      console.error("PATCH /api/admin/manager/categories/:id/icon:", error);
+      return res.status(error.status || 500).json({
+        ok: false,
+        message: error.status ? error.message : "Erro ao atualizar o ícone da categoria."
+      });
     }
   }
 );

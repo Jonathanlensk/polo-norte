@@ -119,6 +119,30 @@ CREATE INDEX IF NOT EXISTS idx_products_active
 ON products(active);
 
 
+-- =========================================================
+-- ESTOQUE POR UNIDADE
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS store_product_stock (
+    store_id VARCHAR(30) NOT NULL,
+    product_id BIGINT NOT NULL
+        REFERENCES products(id)
+        ON DELETE CASCADE,
+    stock_quantity INTEGER NOT NULL DEFAULT 0
+        CHECK (stock_quantity >= 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (store_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_product_stock_product
+ON store_product_stock(product_id);
+
+CREATE INDEX IF NOT EXISTS idx_store_product_stock_store
+ON store_product_stock(store_id);
+
+
 CREATE INDEX IF NOT EXISTS idx_products_category
 ON products(category);
 
@@ -130,6 +154,7 @@ ON products(category);
 CREATE TABLE IF NOT EXISTS product_categories (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    icon_key VARCHAR(40),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -139,8 +164,33 @@ CREATE TABLE IF NOT EXISTS product_categories (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_product_categories_name_unique
 ON product_categories (LOWER(name));
 
-INSERT INTO product_categories (name)
-SELECT DISTINCT TRIM(category)
+ALTER TABLE product_categories
+    ADD COLUMN IF NOT EXISTS icon_key VARCHAR(40);
+
+INSERT INTO product_categories (name, icon_key)
+SELECT DISTINCT
+    TRIM(category),
+    CASE LOWER(TRANSLATE(TRIM(category), 'ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç', 'AAAAEEIOOOUCaaaaeeiooouc'))
+        WHEN 'cervejas' THEN 'caneca'
+        WHEN 'destilados' THEN 'garrafa'
+        WHEN 'vinhos' THEN 'taca'
+        WHEN 'refrigerantes' THEN 'lata'
+        WHEN 'energeticos' THEN 'raio'
+        WHEN 'aguas' THEN 'gota'
+        WHEN 'gelo' THEN 'floco'
+        WHEN 'sucos' THEN 'copo'
+        WHEN 'combos' THEN 'presente'
+        WHEN 'snacks' THEN 'snack'
+        WHEN 'salgadinho' THEN 'snack'
+        WHEN 'salgadinhos' THEN 'snack'
+        WHEN 'doces' THEN 'doce'
+        WHEN 'balas' THEN 'doce'
+        WHEN 'chicletes' THEN 'doce'
+        WHEN 'balas e chicletes' THEN 'doce'
+        WHEN 'balas, chicletes e doces' THEN 'doce'
+        WHEN 'carvao' THEN 'fogo'
+        ELSE 'presente'
+    END
 FROM products p
 WHERE p.category IS NOT NULL
   AND TRIM(p.category) <> ''
@@ -149,6 +199,14 @@ WHERE p.category IS NOT NULL
       FROM product_categories c
       WHERE LOWER(c.name) = LOWER(TRIM(p.category))
   );
+
+UPDATE product_categories
+SET icon_key = 'presente'
+WHERE icon_key IS NULL OR TRIM(icon_key) = '';
+
+ALTER TABLE product_categories
+    ALTER COLUMN icon_key SET DEFAULT 'presente',
+    ALTER COLUMN icon_key SET NOT NULL;
 
 
 -- =========================================================
@@ -159,6 +217,9 @@ CREATE TABLE IF NOT EXISTS orders (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
     order_number VARCHAR(50) NOT NULL UNIQUE,
+
+    -- Unidade que separa e entrega este pedido.
+    unit_id VARCHAR(30),
 
     -- Pode ser NULL porque vamos permitir compra sem cadastro.
     customer_id BIGINT
@@ -331,12 +392,16 @@ CREATE TABLE IF NOT EXISTS admins (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
     name VARCHAR(150) NOT NULL,
-    email VARCHAR(200) NOT NULL,
+    login VARCHAR(30) NOT NULL,
+    email VARCHAR(200),
 
     -- Será armazenado com bcrypt.
     password_hash TEXT NOT NULL,
 
     role VARCHAR(30) NOT NULL DEFAULT 'admin',
+
+    -- Operadores ficam vinculados a uma unidade. Gerentes usam NULL.
+    unit_id VARCHAR(30),
 
     active BOOLEAN NOT NULL DEFAULT TRUE,
 
@@ -350,6 +415,21 @@ CREATE TABLE IF NOT EXISTS admins (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_email_unique
 ON admins (LOWER(email));
 
+ALTER TABLE admins
+    ADD COLUMN IF NOT EXISTS login VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS unit_id VARCHAR(30);
+
+UPDATE admins
+SET login = LPAD(id::text, 4, '0')
+WHERE login IS NULL OR TRIM(login) = '';
+
+ALTER TABLE admins
+    ALTER COLUMN login SET NOT NULL,
+    ALTER COLUMN email DROP NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_login_unique
+ON admins (UPPER(login));
+
 
 -- =========================================================
 -- CONFIGURAÇÕES DA LOJA
@@ -360,6 +440,19 @@ CREATE TABLE IF NOT EXISTS store_settings (
         CHECK (id = 1),
 
     store_open BOOLEAN NOT NULL DEFAULT TRUE,
+
+    store_name VARCHAR(150),
+    store_whatsapp VARCHAR(30),
+    delivery_label VARCHAR(80),
+    delivery_price_per_km NUMERIC(10,2),
+    delivery_min_fee NUMERIC(10,2),
+    delivery_max_distance_km NUMERIC(10,2),
+    delivery_window_minutes INTEGER,
+    delivery_dispatch_buffer_minutes INTEGER,
+
+    unit_julio_active BOOLEAN NOT NULL DEFAULT TRUE,
+    unit_vila_active BOOLEAN NOT NULL DEFAULT TRUE,
+    unit_divino_active BOOLEAN NOT NULL DEFAULT TRUE,
 
     delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0
         CHECK (delivery_fee >= 0),
@@ -378,6 +471,19 @@ CREATE TABLE IF NOT EXISTS store_settings (
 INSERT INTO store_settings (id)
 VALUES (1)
 ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE store_settings
+    ADD COLUMN IF NOT EXISTS store_name VARCHAR(150),
+    ADD COLUMN IF NOT EXISTS store_whatsapp VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS delivery_label VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS delivery_price_per_km NUMERIC(10,2),
+    ADD COLUMN IF NOT EXISTS delivery_min_fee NUMERIC(10,2),
+    ADD COLUMN IF NOT EXISTS delivery_max_distance_km NUMERIC(10,2),
+    ADD COLUMN IF NOT EXISTS delivery_window_minutes INTEGER,
+    ADD COLUMN IF NOT EXISTS delivery_dispatch_buffer_minutes INTEGER,
+    ADD COLUMN IF NOT EXISTS unit_julio_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS unit_vila_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS unit_divino_active BOOLEAN NOT NULL DEFAULT TRUE;
 
 
 -- =========================================================

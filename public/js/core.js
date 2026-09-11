@@ -4,6 +4,7 @@ const CONFIG = {
         config: "/api/config",
         products: "/api/products",
         deliveryQuote: "/api/delivery/quote",
+        storeSettings: "/api/store/settings",
 
         register: "/api/auth/register",
         login: "/api/auth/login",
@@ -17,6 +18,14 @@ const CONFIG = {
 
     entrega: {
         previsao: "Calculando..."
+    },
+
+    loja: {
+        nome: "Polo Norte Bebidas",
+        whatsapp: "",
+        aberta: true,
+        status: "Aberto 24 horas",
+        entregaTexto: "Entrega rápida"
     }
 };
 
@@ -49,9 +58,22 @@ const ICONES = {
     caneca: '<path d="M4 8h11v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8z"/><path d="M15 10h3a2 2 0 0 1 0 4h-3"/><path d="M6 8c0-2 1-3 1-4"/>',
     garrafa: '<path d="M10 2h4v4l2 3v11a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V9l2-3z"/><path d="M9 12h6"/>',
     lata: '<path d="M6 6h12l-1 15H7z"/><path d="M6 6c0-1.7 2.7-3 6-3s6 1.3 6 3"/>',
+    copo: '<path d="M7 4h10l-1.2 17H8.2L7 4z"/><path d="M9 8h6"/><path d="M13 4l3-3"/>',
+    snack: '<path d="M7 3h10l2 18H5L7 3z"/><path d="M8 8c2 1 6 1 8 0"/><path d="M9 13h6"/>',
+    doce: '<path d="M8 8l8 8"/><path d="M9.5 6.5a4.95 4.95 0 0 1 7 7l-3 3a4.95 4.95 0 0 1-7-7z"/><path d="M6.5 9.5 3 7l2-4 4 3.5"/><path d="M17.5 14.5 21 17l-2 4-4-3.5"/>',
+    fogo: '<path d="M13 2s1 4-2 7c-2-2-4-1-4 2 0 2 1 3 2 4-1-4 3-5 3-5s5 3 5 7a5 5 0 0 1-10 0c0-4 3-7 6-9z"/>',
     loja: '<path d="M4 10v10h16V10"/><path d="M2 5h20l-1.5 5h-17z"/><path d="M9 20v-6h6v6"/>',
     diamante: '<path d="M4 9l4-6h8l4 6-10 12z"/>'
 };
+
+function textoSeguro(valor = "") {
+    return String(valor)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
 
 function icon(nome, tamanho = 18) {
     return `
@@ -71,7 +93,7 @@ function icon(nome, tamanho = 18) {
     `;
 }
 
-const unidades = [
+const UNIDADES_BASE = [
     {
         id: "julio",
         nome: "Júlio de Mesquita",
@@ -95,6 +117,8 @@ const unidades = [
     }
 ];
 
+let unidades = UNIDADES_BASE.map((unidade) => ({ ...unidade }));
+
 const iconesCategoriasConhecidas = {
     Cervejas: "caneca",
     Destilados: "garrafa",
@@ -102,12 +126,74 @@ const iconesCategoriasConhecidas = {
     Refrigerantes: "lata",
     Energéticos: "raio",
     Águas: "gota",
-    Gelo: "floco"
+    Gelo: "floco",
+    Sucos: "copo",
+    Combos: "presente",
+    Snacks: "snack",
+    Salgadinhos: "snack",
+    Salgadinho: "snack",
+    Doces: "doce",
+    Balas: "doce",
+    Chicletes: "doce",
+    "Balas e chicletes": "doce",
+    "Balas, chicletes e doces": "doce",
+    "Carvão": "fogo"
 };
 
 let categoriasInfo = {
     Todos: { icone: "presente" }
 };
+
+
+async function carregarConfiguracoesLoja() {
+    try {
+        const resposta = await fetch(CONFIG.api.storeSettings, { cache: "no-store" });
+        const resultado = await resposta.json();
+
+        if (!resposta.ok || !resultado?.settings) {
+            throw new Error(
+                resultado?.message ||
+                "Não foi possível carregar as configurações da loja."
+            );
+        }
+
+        const settings = resultado.settings;
+
+        CONFIG.loja.nome = settings.storeName || "Polo Norte Bebidas";
+        CONFIG.loja.whatsapp = settings.whatsapp || "";
+        CONFIG.loja.entregaTexto = settings.deliveryLabel || "Entrega rápida";
+
+        // Cada unidade pode ser aberta/fechada separadamente pelo gerente.
+        unidades = UNIDADES_BASE.map((unidade) => {
+            const aberta = settings.units?.[unidade.id]?.active !== false;
+
+            return {
+                ...unidade,
+                aberta,
+                status: aberta ? "Aberto 24 horas" : "Fechado temporariamente"
+            };
+        });
+
+        CONFIG.loja.aberta = unidades.some((unidade) => unidade.aberta);
+        CONFIG.loja.status = CONFIG.loja.aberta
+            ? "Aberto 24 horas"
+            : "Fechado temporariamente";
+
+        if (estado?.unidade) {
+            const unidadeAtual = unidades.find(
+                (unidade) => unidade.id === estado.unidade.id
+            );
+
+            if (!unidadeAtual || !unidadeAtual.aberta) {
+                estado.unidade = null;
+            } else {
+                estado.unidade = unidadeAtual;
+            }
+        }
+    } catch (erro) {
+        console.warn("Configurações da loja:", erro);
+    }
+}
 
 const classesCategoria = {
     Cervejas: "cat-cervejas",
@@ -133,7 +219,13 @@ function emojiProduto(categoria) {
         Refrigerantes: "🥤",
         Energéticos: "⚡",
         Águas: "💧",
-        Gelo: "🧊"
+        Gelo: "🧊",
+        Snacks: "🍟",
+        Salgadinhos: "🍟",
+        Salgadinho: "🍟",
+        Doces: "🍬",
+        Balas: "🍬",
+        Chicletes: "🍬"
     };
 
     return emojis[categoria] || "🛍️";
@@ -141,7 +233,16 @@ function emojiProduto(categoria) {
 
 async function carregarProdutos() {
     try {
-        const resposta = await fetch(CONFIG.api.products, { cache: "no-store" });
+        const params = new URLSearchParams();
+        if (estado?.unidade?.id) {
+            params.set("unitId", estado.unidade.id);
+        }
+
+        const urlProdutos = params.toString()
+            ? `${CONFIG.api.products}?${params.toString()}`
+            : CONFIG.api.products;
+
+        const resposta = await fetch(urlProdutos, { cache: "no-store" });
 
         const resultado = await resposta.json();
 
@@ -161,21 +262,37 @@ async function carregarProdutos() {
                 ? null
                 : Number(produto.precoOriginal),
             estoque: Number(produto.estoque),
+            disponivelNaUnidade: produto.disponivelNaUnidade !== false,
 
             emoji: emojiProduto(produto.categoria)
         }));
 
-        const categoriasDoBanco = Array.isArray(resultado.categories)
-            ? resultado.categories
-            : [...new Set(produtos.map(produto => produto.categoria).filter(Boolean))];
+        const categoriasDoBanco = Array.isArray(resultado.categoryDetails)
+            ? resultado.categoryDetails
+            : Array.isArray(resultado.categories)
+                ? resultado.categories.map(nome => ({ name: nome, icon: null }))
+                : [...new Set(produtos.map(produto => produto.categoria).filter(Boolean))]
+                    .map(nome => ({ name: nome, icon: null }));
 
         categoriasInfo = {
             Todos: { icone: "presente" }
         };
 
         categoriasDoBanco.forEach(categoria => {
-            categoriasInfo[categoria] = {
-                icone: iconesCategoriasConhecidas[categoria] || "presente"
+            const nome = typeof categoria === "string"
+                ? categoria
+                : categoria?.name;
+
+            if (!nome) return;
+
+            const iconeBanco = typeof categoria === "object"
+                ? String(categoria.icon || "").trim()
+                : "";
+
+            categoriasInfo[nome] = {
+                icone: ICONES[iconeBanco]
+                    ? iconeBanco
+                    : (iconesCategoriasConhecidas[nome] || "presente")
             };
         });
 

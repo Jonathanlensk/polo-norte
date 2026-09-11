@@ -1,14 +1,23 @@
 const db = require("../../database/db");
+const {
+  ensureStoreInventorySchema,
+  assertStoreId,
+  syncLegacyProductStock
+} = require("./store-inventory.service");
 
 let inventorySchemaPromise = null;
 
 async function ensureInventorySchema() {
   if (!inventorySchemaPromise) {
-    inventorySchemaPromise = db.query(`
-      ALTER TABLE orders
-        ADD COLUMN IF NOT EXISTS stock_reserved_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS stock_released_at TIMESTAMPTZ
-    `).catch((error) => {
+    inventorySchemaPromise = (async () => {
+      await ensureStoreInventorySchema();
+      await db.query(`
+        ALTER TABLE orders
+          ADD COLUMN IF NOT EXISTS stock_reserved_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS stock_released_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS unit_id VARCHAR(30)
+      `);
+    })().catch((error) => {
       inventorySchemaPromise = null;
       throw error;
     });
@@ -32,6 +41,7 @@ async function reserveStockForOrder(orderId, client) {
       `
         SELECT
           id,
+          unit_id,
           payment_status,
           stock_reserved_at,
           stock_released_at
@@ -63,7 +73,6 @@ async function reserveStockForOrder(orderId, client) {
       };
     }
 
-    // Pedido rejeitado/cancelado não deve consumir estoque.
     if (["rejected", "cancelled"].includes(String(order.payment_status || ""))) {
       if (ownsClient) {
         await connection.query("COMMIT");
@@ -74,6 +83,14 @@ async function reserveStockForOrder(orderId, client) {
         alreadyProcessed: false
       };
     }
+
+    if (!order.unit_id) {
+      const error = new Error("O pedido não possui unidade vinculada para reservar o estoque.");
+      error.status = 409;
+      throw error;
+    }
+
+    const unitId = assertStoreId(order.unit_id);
 
     const itemsResult = await connection.query(
       `
@@ -98,34 +115,44 @@ async function reserveStockForOrder(orderId, client) {
 
       const stockResult = await connection.query(
         `
-          UPDATE products
+          UPDATE store_product_stock
           SET
-            stock_quantity = stock_quantity - $2,
+            stock_quantity = stock_quantity - $3,
             updated_at = NOW()
-          WHERE id = $1
+          WHERE product_id = $1
+            AND store_id = $2
             AND active = TRUE
-            AND stock_quantity >= $2
+            AND stock_quantity >= $3
           RETURNING stock_quantity
         `,
-        [item.product_id, quantity]
+        [item.product_id, unitId, quantity]
       );
 
       if (!stockResult.rows.length) {
         const currentResult = await connection.query(
-          `SELECT stock_quantity FROM products WHERE id = $1 LIMIT 1`,
-          [item.product_id]
+          `
+            SELECT stock_quantity, active
+            FROM store_product_stock
+            WHERE product_id = $1
+              AND store_id = $2
+            LIMIT 1
+          `,
+          [item.product_id, unitId]
         );
 
-        const available = currentResult.rows.length
-          ? Number(currentResult.rows[0].stock_quantity || 0)
+        const current = currentResult.rows[0];
+        const available = current && current.active
+          ? Number(current.stock_quantity || 0)
           : 0;
 
         const error = new Error(
-          `Estoque insuficiente para ${item.product_name}. Disponível: ${available}.`
+          `Estoque insuficiente para ${item.product_name} nesta unidade. Disponível: ${available}.`
         );
         error.status = 409;
         throw error;
       }
+
+      await syncLegacyProductStock(item.product_id, connection);
     }
 
     await connection.query(
@@ -145,7 +172,8 @@ async function reserveStockForOrder(orderId, client) {
 
     return {
       reserved: true,
-      alreadyProcessed: false
+      alreadyProcessed: false,
+      unitId
     };
   } catch (error) {
     if (ownsClient) {
@@ -174,6 +202,7 @@ async function releaseStockForOrder(orderId, client) {
       `
         SELECT
           id,
+          unit_id,
           stock_reserved_at,
           stock_released_at
         FROM orders
@@ -195,6 +224,14 @@ async function releaseStockForOrder(orderId, client) {
       };
     }
 
+    if (!order.unit_id) {
+      const error = new Error("O pedido não possui unidade vinculada para devolver o estoque.");
+      error.status = 409;
+      throw error;
+    }
+
+    const unitId = assertStoreId(order.unit_id);
+
     const itemsResult = await connection.query(
       `
         SELECT product_id, quantity
@@ -214,14 +251,23 @@ async function releaseStockForOrder(orderId, client) {
 
       await connection.query(
         `
-          UPDATE products
-          SET
-            stock_quantity = stock_quantity + $2,
+          INSERT INTO store_product_stock (
+            store_id,
+            product_id,
+            stock_quantity,
+            active,
+            updated_at
+          )
+          VALUES ($1, $2, $3, TRUE, NOW())
+          ON CONFLICT (store_id, product_id)
+          DO UPDATE SET
+            stock_quantity = store_product_stock.stock_quantity + EXCLUDED.stock_quantity,
             updated_at = NOW()
-          WHERE id = $1
         `,
-        [item.product_id, quantity]
+        [unitId, item.product_id, quantity]
       );
+
+      await syncLegacyProductStock(item.product_id, connection);
     }
 
     await connection.query(
@@ -240,7 +286,8 @@ async function releaseStockForOrder(orderId, client) {
     }
 
     return {
-      released: true
+      released: true,
+      unitId
     };
   } catch (error) {
     if (ownsClient) {

@@ -18,16 +18,21 @@ const state = {
   },
   products: [],
   categories: [],
+  users: [],
+  settings: null,
   selectedOrder: null,
   selectedProduct: null,
   pendingImageData: null,
   removeProductImage: false,
   loading: false,
   catalogLoading: false,
+  usersLoading: false,
+  settingsLoading: false,
   filterStatus: "",
   search: "",
   productSearch: "",
   productCategory: "",
+  stockUnit: "julio",
   loginError: ""
 };
 
@@ -58,6 +63,62 @@ const ROLE_TEXT = {
   operator: "Operador",
   manager: "Gerente"
 };
+
+const CATEGORY_ICON_OPTIONS = [
+  { key: "caneca", symbol: "🍺", label: "Cerveja" },
+  { key: "garrafa", symbol: "🍾", label: "Garrafa" },
+  { key: "taca", symbol: "🍷", label: "Vinho" },
+  { key: "lata", symbol: "🥤", label: "Refrigerante" },
+  { key: "copo", symbol: "🧃", label: "Suco" },
+  { key: "gota", symbol: "💧", label: "Água" },
+  { key: "floco", symbol: "❄️", label: "Gelo" },
+  { key: "raio", symbol: "⚡", label: "Energético" },
+  { key: "snack", symbol: "🍟", label: "Salgadinho" },
+  { key: "doce", symbol: "🍬", label: "Balas, chicletes e doces" },
+  { key: "fogo", symbol: "🔥", label: "Carvão" },
+  { key: "presente", symbol: "🎁", label: "Combo" },
+  { key: "caixa", symbol: "📦", label: "Outros" }
+];
+
+const ADMIN_UNITS = [
+  { id: "julio", name: "Júlio de Mesquita" },
+  { id: "vila", name: "Vila Helena" },
+  { id: "divino", name: "Largo do Divino" }
+];
+
+function categoryIconOption(key) {
+  return CATEGORY_ICON_OPTIONS.find((option) => option.key === key)
+    || CATEGORY_ICON_OPTIONS.find((option) => option.key === "presente");
+}
+
+function categoryIconSymbol(key) {
+  return categoryIconOption(key)?.symbol || "🎁";
+}
+
+function adminUnitName(unitId) {
+  return ADMIN_UNITS.find((unit) => unit.id === unitId)?.name || unitId;
+}
+
+function productUnitInventory(product, unitId) {
+  const entry = product?.unitStock?.[unitId] || {};
+  return {
+    stockQuantity: Number(entry.stockQuantity || 0),
+    active: entry.active !== false
+  };
+}
+
+function productTotalStock(product) {
+  return ADMIN_UNITS.reduce(
+    (total, unit) => total + productUnitInventory(product, unit.id).stockQuantity,
+    0
+  );
+}
+
+function productActiveUnitCount(product) {
+  return ADMIN_UNITS.filter(
+    (unit) => productUnitInventory(product, unit.id).active
+  ).length;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -117,8 +178,8 @@ function renderLogin() {
 
         <form id="loginForm">
           <div class="field">
-            <label for="adminEmail">E-mail</label>
-            <input id="adminEmail" type="email" autocomplete="username" required>
+            <label for="adminLogin">Matrícula</label>
+            <input id="adminLogin" type="text" maxlength="30" autocomplete="username" placeholder="Ex.: 0001" required>
           </div>
 
           <div class="field">
@@ -158,23 +219,19 @@ function renderManagerSidebar() {
         <strong>Gerenciamento</strong>
       </div>
 
-      ${MANAGER_MENU.map(([view, icon, name, description]) => {
-        const implemented = !["settings", "users"].includes(view);
-        return `
-          <button
-            class="manager-menu-item ${state.view === view ? "active" : ""}"
-            type="button"
-            ${implemented ? `data-manager-view="${view}"` : `data-manager-future="${escapeHtml(name)}"`}
-          >
-            <span class="menu-icon">${icon}</span>
-            <span>
-              <strong>${escapeHtml(name)}</strong>
-              <small>${escapeHtml(description)}</small>
-            </span>
-            ${implemented ? "" : "<em>Próxima etapa</em>"}
-          </button>
-        `;
-      }).join("")}
+      ${MANAGER_MENU.map(([view, icon, name, description]) => `
+        <button
+          class="manager-menu-item ${state.view === view ? "active" : ""}"
+          type="button"
+          data-manager-view="${view}"
+        >
+          <span class="menu-icon">${icon}</span>
+          <span>
+            <strong>${escapeHtml(name)}</strong>
+            <small>${escapeHtml(description)}</small>
+          </span>
+        </button>
+      `).join("")}
     </aside>
   `;
 }
@@ -215,7 +272,7 @@ function renderHeader() {
         <span class="role-pill ${isManager() ? "manager" : "operator"}">${escapeHtml(roleText())}</span>
         <div class="admin-user-copy">
           <strong>${escapeHtml(state.admin.name)}</strong>
-          <span>${escapeHtml(state.admin.email)}</span>
+          <span>Matrícula ${escapeHtml(state.admin.login || "—")}${!isManager() && state.admin.unitId ? ` · ${escapeHtml(adminUnitName(state.admin.unitId))}` : ""}</span>
         </div>
         <button class="ghost-button" id="logoutButton">Sair</button>
       </div>
@@ -241,7 +298,7 @@ function renderDashboard() {
       <div class="${isManager() ? "manager-layout" : ""}">
         ${renderManagerSidebar()}
         <main class="admin-content ${isManager() ? "manager-content" : ""}">
-          ${isManager() ? renderManagerOverview() : ""}
+          ${isManager() && !["settings", "users"].includes(state.view) ? renderManagerOverview() : ""}
           ${content}
         </main>
       </div>
@@ -261,6 +318,8 @@ function renderCurrentView() {
     case "stock": return renderStockView();
     case "categories": return renderCategoriesView();
     case "promotions": return renderPromotionsView();
+    case "settings": return renderSettingsView();
+    case "users": return renderUsersView();
     default: return renderOrdersView();
   }
 }
@@ -289,6 +348,7 @@ function renderOrdersView() {
                   <td>
                     <span class="order-number">${escapeHtml(order.orderNumber)}</span>
                     <span class="cell-sub">${order.itemQuantity} item(ns)</span>
+                    ${order.unitName ? `<span class="cell-sub">📍 ${escapeHtml(order.unitName)}</span>` : ""}
                   </td>
                   <td>
                     <span class="cell-main">${escapeHtml(order.customerName)}</span>
@@ -316,7 +376,11 @@ function renderOrdersView() {
     <div class="page-title-row">
       <div>
         <h1>Pedidos</h1>
-        <p>Acompanhe e atualize os pedidos da loja.</p>
+        <p>${isManager()
+          ? "Acompanhe e atualize os pedidos de todas as unidades."
+          : state.admin.unitId
+            ? `Exibindo somente pedidos de ${escapeHtml(adminUnitName(state.admin.unitId))}.`
+            : "Operador sem unidade vinculada. Peça ao gerente para definir sua unidade."}</p>
       </div>
       <button class="secondary-button" id="refreshButton">Atualizar pedidos</button>
     </div>
@@ -417,7 +481,7 @@ function renderProductsView() {
                 <th>Produto</th>
                 <th>Categoria</th>
                 <th>Preço</th>
-                <th>Estoque</th>
+                <th>Lojas</th>
                 <th>Situação</th>
                 <th></th>
               </tr>
@@ -436,7 +500,10 @@ function renderProductsView() {
                   </td>
                   <td>${escapeHtml(product.category)}</td>
                   <td>${promotionPriceHtml(product)}</td>
-                  <td><span class="stock-badge ${product.stockQuantity <= 5 ? "low" : ""}">${product.stockQuantity}</span></td>
+                  <td>
+                    <span class="stock-badge">${productActiveUnitCount(product)}/3</span>
+                    <span class="cell-sub">unidades com venda ativa</span>
+                  </td>
                   <td><span class="badge ${product.active ? "approved" : "cancelled"}">${product.active ? "Ativo" : "Desativado"}</span></td>
                   <td><button class="secondary-button" data-edit-product="${product.id}">Editar</button></td>
                 </tr>
@@ -451,17 +518,30 @@ function renderProductsView() {
 
 function renderStockView() {
   const products = filteredProducts();
+  const selectedUnit = ADMIN_UNITS.find((unit) => unit.id === state.stockUnit) || ADMIN_UNITS[0];
 
   return `
     <div class="page-title-row">
       <div>
-        <h1>Estoque</h1>
-        <p>Atualize rapidamente a quantidade disponível para venda.</p>
+        <h1>Estoque por unidade</h1>
+        <p>Controle separadamente o que existe e o que é vendido em cada loja.</p>
       </div>
       <button class="secondary-button" id="reloadCatalogButton">Atualizar estoque</button>
     </div>
 
     <section class="panel">
+      <div class="stock-unit-selector">
+        <div>
+          <strong>Unidade selecionada</strong>
+          <span>As alterações abaixo afetam somente esta loja.</span>
+        </div>
+        <select class="status-select" id="stockUnitSelect">
+          ${ADMIN_UNITS.map((unit) => `
+            <option value="${unit.id}" ${state.stockUnit === unit.id ? "selected" : ""}>${escapeHtml(unit.name)}</option>
+          `).join("")}
+        </select>
+      </div>
+
       <div class="catalog-toolbar">
         <input class="search-input" id="productSearch" placeholder="Buscar produto" value="${escapeHtml(state.productSearch)}">
         <select class="status-select" id="productCategoryFilter">
@@ -472,21 +552,37 @@ function renderStockView() {
         </select>
       </div>
 
+      <div class="stock-unit-heading">
+        <strong>${escapeHtml(selectedUnit.name)}</strong>
+        <span>${products.length} produto(s) no catálogo</span>
+      </div>
+
       <div class="stock-grid">
-        ${products.map((product) => `
-          <article class="stock-card ${product.stockQuantity <= 5 ? "stock-card-low" : ""}">
-            ${productImage(product, "stock-thumb")}
-            <div class="stock-copy">
-              <strong>${escapeHtml(product.name)}</strong>
-              <span>${escapeHtml(product.category)}</span>
-            </div>
-            <label>
-              Quantidade
-              <input type="number" min="0" step="1" value="${product.stockQuantity}" data-stock-input="${product.id}">
-            </label>
-            <button class="primary-button" data-save-stock="${product.id}">Salvar</button>
-          </article>
-        `).join("") || `<div class="empty-state">Nenhum produto encontrado.</div>`}
+        ${products.map((product) => {
+          const inventory = productUnitInventory(product, state.stockUnit);
+          const low = inventory.active && inventory.stockQuantity <= 5;
+          return `
+            <article class="stock-card ${low ? "stock-card-low" : ""} ${!inventory.active ? "stock-card-disabled" : ""}">
+              ${productImage(product, "stock-thumb")}
+              <div class="stock-copy">
+                <strong>${escapeHtml(product.name)}</strong>
+                <span>${escapeHtml(product.category)}</span>
+                <em class="store-product-status ${inventory.active ? "available" : "unavailable"}">
+                  ${inventory.active ? "Vendido nesta unidade" : "Não vendido nesta unidade"}
+                </em>
+              </div>
+              <label class="stock-available-toggle">
+                <input type="checkbox" data-stock-active="${product.id}" ${inventory.active ? "checked" : ""}>
+                Disponível
+              </label>
+              <label>
+                Quantidade
+                <input type="number" min="0" step="1" value="${inventory.stockQuantity}" data-stock-input="${product.id}">
+              </label>
+              <button class="primary-button" data-save-stock="${product.id}">Salvar</button>
+            </article>
+          `;
+        }).join("") || `<div class="empty-state">Nenhum produto encontrado.</div>`}
       </div>
     </section>
   `;
@@ -509,6 +605,21 @@ function renderCategoriesView() {
           <label for="categoryName">Nome</label>
           <input id="categoryName" maxlength="100" placeholder="Nome da categoria" required>
         </div>
+
+        <fieldset class="category-icon-picker">
+          <legend>Ícone da categoria</legend>
+          <p class="cell-sub">Escolha o símbolo que melhor representa a categoria no catálogo do cliente.</p>
+          <div class="category-icon-options">
+            ${CATEGORY_ICON_OPTIONS.map((option) => `
+              <label class="category-icon-choice" title="${escapeHtml(option.label)}">
+                <input type="radio" name="categoryIcon" value="${escapeHtml(option.key)}" required>
+                <span class="category-icon-choice-symbol">${option.symbol}</span>
+                <span class="category-icon-choice-label">${escapeHtml(option.label)}</span>
+              </label>
+            `).join("")}
+          </div>
+        </fieldset>
+
         <button class="primary-button" type="submit">Adicionar categoria</button>
         <p class="message" id="categoryMessage"></p>
       </form>
@@ -523,11 +634,22 @@ function renderCategoriesView() {
             const count = state.products.filter((product) => product.category === category.name).length;
             return `
               <div class="category-row">
-                <div>
-                  <strong>${escapeHtml(category.name)}</strong>
-                  <span>${count} produto(s)</span>
+                <div class="category-row-main">
+                  <span class="category-row-icon" aria-hidden="true">${categoryIconSymbol(category.icon)}</span>
+                  <div>
+                    <strong>${escapeHtml(category.name)}</strong>
+                    <span>${count} produto(s)</span>
+                  </div>
                 </div>
-                <span class="badge approved">Ativa</span>
+                <div class="category-row-actions">
+                  <select class="category-icon-select" data-category-icon-select="${category.id}" aria-label="Ícone de ${escapeHtml(category.name)}">
+                    ${CATEGORY_ICON_OPTIONS.map((option) => `
+                      <option value="${escapeHtml(option.key)}" ${option.key === category.icon ? "selected" : ""}>${option.symbol} ${escapeHtml(option.label)}</option>
+                    `).join("")}
+                  </select>
+                  <button class="secondary-button category-icon-save" type="button" data-save-category-icon="${category.id}">Salvar ícone</button>
+                  <span class="badge approved">Ativa</span>
+                </div>
               </div>
             `;
           }).join("") || `<div class="empty-state">Nenhuma categoria cadastrada.</div>`}
@@ -592,6 +714,279 @@ function renderPromotionsView() {
   `;
 }
 
+
+function renderSettingsView() {
+  const settings = state.settings || {
+    storeName: "Polo Norte Bebidas",
+    whatsapp: "",
+    deliveryLabel: "Entrega rápida",
+    delivery: {
+      pricePerKm: 1.5,
+      minimumFee: 4,
+      maxDistanceKm: 15,
+      windowMinutes: 10,
+      dispatchBufferMinutes: 5
+    },
+    units: {
+      julio: { active: true },
+      vila: { active: true },
+      divino: { active: true }
+    }
+  };
+
+  return `
+    <div class="page-title-row">
+      <div>
+        <h1>Configurações</h1>
+        <p>Controle os dados da loja, os valores de entrega e o funcionamento de cada unidade.</p>
+      </div>
+    </div>
+
+    ${state.settingsLoading ? `<div class="loading-state">Carregando configurações...</div>` : `
+      <form id="settingsForm" class="settings-grid">
+        <section class="panel settings-card">
+          <div class="settings-card-title">
+            <span class="settings-icon">◉</span>
+            <div>
+              <h2>Informações da loja</h2>
+              <p>Dados e textos exibidos ao cliente.</p>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="settingsStoreName">Nome da loja</label>
+            <input id="settingsStoreName" maxlength="150" value="${escapeHtml(settings.storeName)}" required>
+          </div>
+
+          <div class="field">
+            <label for="settingsWhatsapp">WhatsApp de contato</label>
+            <input id="settingsWhatsapp" maxlength="30" value="${escapeHtml(settings.whatsapp || "")}" placeholder="Ex.: 15999999999">
+          </div>
+
+          <div class="field">
+            <label for="settingsDeliveryLabel">Texto mostrado sobre a entrega</label>
+            <input id="settingsDeliveryLabel" maxlength="80" value="${escapeHtml(settings.deliveryLabel)}" placeholder="Entrega rápida" required>
+            <small class="field-help">Exemplo: “Entrega rápida”. Esse texto aparece na área do cliente.</small>
+          </div>
+        </section>
+
+        <section class="panel settings-card">
+          <div class="settings-card-title">
+            <span class="settings-icon">↗</span>
+            <div>
+              <h2>Valores e alcance da entrega</h2>
+              <p>Defina quanto cobrar, até onde entregar e como montar a previsão de chegada.</p>
+            </div>
+          </div>
+
+          <div class="settings-number-grid">
+            <div class="field">
+              <label for="settingsPricePerKm">Valor cobrado por km (R$)</label>
+              <input id="settingsPricePerKm" type="number" min="0" max="100" step="0.01" value="${Number(settings.delivery.pricePerKm)}" required>
+              <small class="field-help">Ex.: 1,50 significa R$ 1,50 por km percorrido.</small>
+            </div>
+            <div class="field">
+              <label for="settingsMinimumFee">Valor mínimo da entrega (R$)</label>
+              <input id="settingsMinimumFee" type="number" min="0" max="500" step="0.01" value="${Number(settings.delivery.minimumFee)}" required>
+              <small class="field-help">Menor valor cobrado mesmo quando o cálculo por km for mais baixo.</small>
+            </div>
+            <div class="field">
+              <label for="settingsMaxDistance">Distância máxima para entrega (km)</label>
+              <input id="settingsMaxDistance" type="number" min="0.5" max="200" step="0.1" value="${Number(settings.delivery.maxDistanceKm)}" required>
+              <small class="field-help">Endereços acima desse limite não poderão finalizar a entrega.</small>
+            </div>
+            <div class="field">
+              <label for="settingsWindowMinutes">Intervalo da previsão (min)</label>
+              <input id="settingsWindowMinutes" type="number" min="5" max="180" step="1" value="${Number(settings.delivery.windowMinutes)}" required>
+              <small class="field-help">Ex.: 5 gera uma previsão como 15–20 minutos.</small>
+            </div>
+            <div class="field">
+              <label for="settingsDispatchBuffer">Tempo extra antes da saída (min)</label>
+              <input id="settingsDispatchBuffer" type="number" min="0" max="180" step="1" value="${Number(settings.delivery.dispatchBufferMinutes)}" required>
+              <small class="field-help">Minutos acrescentados ao tempo da rota antes de formar a previsão.</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel settings-card settings-units-card">
+          <div class="settings-card-title">
+            <span class="settings-icon">⌂</span>
+            <div>
+              <h2>Status das unidades</h2>
+              <p>Feche apenas a unidade desejada. As outras continuam recebendo pedidos normalmente.</p>
+            </div>
+          </div>
+
+          <div class="unit-settings-list">
+            ${[
+              ["julio", "Júlio de Mesquita", "R. Lamartine Babo, 1092"],
+              ["vila", "Vila Helena", "Av. Riusaku Kanizawa, 343"],
+              ["divino", "Largo do Divino", "R. Dr. Luiz Mendes de Almeida, 777"]
+            ].map(([id, name, address]) => {
+              const opened = settings.units?.[id]?.active !== false;
+              return `
+                <label class="unit-setting-row ${opened ? "unit-open" : "unit-closed"}">
+                  <span>
+                    <strong>${escapeHtml(name)}</strong>
+                    <small>${escapeHtml(address)}</small>
+                  </span>
+                  <span class="switch-control">
+                    <input type="checkbox" data-unit-setting="${id}" ${opened ? "checked" : ""}>
+                    <em>${opened ? "Aberta 24 horas" : "Fechada temporariamente"}</em>
+                  </span>
+                </label>
+              `;
+            }).join("")}
+          </div>
+          <p class="settings-help">Ao fechar uma unidade, ela continuará aparecendo para o cliente como “Fechada temporariamente”, mas não poderá ser selecionada para novos pedidos.</p>
+        </section>
+
+        <section class="panel settings-save-card">
+          <div>
+            <h2>Salvar configurações</h2>
+            <p>As alterações de preço, alcance e status das unidades passam a valer para novos pedidos.</p>
+          </div>
+          <div class="settings-save-actions">
+            <p class="message" id="settingsMessage"></p>
+            <button class="primary-button" type="submit" id="saveSettingsButton">Salvar configurações</button>
+          </div>
+        </section>
+      </form>
+    `}
+  `;
+}
+
+function renderUsersView() {
+  return `
+    <div class="page-title-row">
+      <div>
+        <h1>Usuários</h1>
+        <p>Cadastre operadores e gerentes que poderão acessar o painel pela matrícula.</p>
+      </div>
+    </div>
+
+    <section class="users-layout">
+      <form class="panel user-create-card" id="userCreateForm">
+        <div class="panel-heading">
+          <div>
+            <h2>Novo acesso</h2>
+            <p class="cell-sub">O login no painel será feito com matrícula e senha.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="newUserName">Nome</label>
+          <input id="newUserName" maxlength="150" placeholder="Nome do usuário" required>
+        </div>
+
+        <div class="field">
+          <label for="newUserLogin">Matrícula</label>
+          <input id="newUserLogin" maxlength="30" placeholder="Ex.: 0002 ou CAIXA01" required>
+        </div>
+
+        <div class="field">
+          <label for="newUserEmail">E-mail de contato <small>(opcional)</small></label>
+          <input id="newUserEmail" type="email" maxlength="200" placeholder="usuario@email.com">
+        </div>
+
+        <div class="field">
+          <label for="newUserRole">Perfil</label>
+          <select id="newUserRole" class="status-select">
+            <option value="operator">Operador — pedidos e status</option>
+            <option value="manager">Gerente — acesso completo</option>
+          </select>
+        </div>
+
+        <div class="field" id="newUserUnitField">
+          <label for="newUserUnit">Unidade do operador</label>
+          <select id="newUserUnit" class="status-select">
+            <option value="">Selecione a unidade</option>
+            ${ADMIN_UNITS.map((unit) => `<option value="${unit.id}">${escapeHtml(unit.name)}</option>`).join("")}
+          </select>
+          <small class="cell-sub">O operador verá somente os pedidos desta unidade.</small>
+        </div>
+
+        <div class="field">
+          <label for="newUserPassword">Senha</label>
+          <input id="newUserPassword" type="password" minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres" required>
+        </div>
+
+        <button class="primary-button" type="submit" id="createUserButton">Criar usuário</button>
+        <p class="message" id="userCreateMessage"></p>
+      </form>
+
+      <section class="panel user-list-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Acessos cadastrados</h2>
+            <p class="cell-sub">Altere matrícula, perfil e situação de acesso.</p>
+          </div>
+          <span>${state.users.length}</span>
+        </div>
+
+        ${state.usersLoading ? `<div class="loading-state">Carregando usuários...</div>` : `
+          <div class="admin-users-list">
+            ${state.users.map((user) => `
+              <article class="admin-user-card ${user.active ? "" : "inactive"}" data-user-card="${user.id}">
+                <div class="admin-user-card-top">
+                  <div>
+                    <strong>${escapeHtml(user.name)}</strong>
+                    <span class="role-pill ${user.role === "manager" ? "manager" : "operator"}">${escapeHtml(ROLE_TEXT[user.role] || user.role)}</span>
+                  </div>
+                  <span class="badge ${user.active ? "approved" : "cancelled"}">${user.active ? "Ativo" : "Desativado"}</span>
+                </div>
+
+                <div class="user-edit-grid">
+                  <div class="field">
+                    <label>Nome</label>
+                    <input data-user-name="${user.id}" maxlength="150" value="${escapeHtml(user.name)}">
+                  </div>
+                  <div class="field">
+                    <label>Matrícula</label>
+                    <input data-user-login="${user.id}" maxlength="30" value="${escapeHtml(user.login)}">
+                  </div>
+                  <div class="field">
+                    <label>E-mail <small>(opcional)</small></label>
+                    <input data-user-email="${user.id}" type="email" maxlength="200" value="${escapeHtml(user.email || "")}">
+                  </div>
+                  <div class="field">
+                    <label>Perfil</label>
+                    <select class="status-select" data-user-role="${user.id}">
+                      <option value="operator" ${user.role === "operator" ? "selected" : ""}>Operador</option>
+                      <option value="manager" ${user.role === "manager" ? "selected" : ""}>Gerente</option>
+                    </select>
+                  </div>
+                  <div class="field user-unit-field" data-user-unit-field="${user.id}">
+                    <label>Unidade do operador</label>
+                    <select class="status-select" data-user-unit="${user.id}" ${user.role === "manager" ? "disabled" : ""}>
+                      <option value="">Selecione a unidade</option>
+                      ${ADMIN_UNITS.map((unit) => `<option value="${unit.id}" ${user.unitId === unit.id ? "selected" : ""}>${escapeHtml(unit.name)}</option>`).join("")}
+                    </select>
+                    <small class="cell-sub">${user.role === "manager" ? "Gerentes visualizam todas as unidades." : "Este operador verá somente os pedidos desta unidade."}</small>
+                  </div>
+                </div>
+
+                <div class="user-card-footer">
+                  <div class="user-meta">
+                    <span>Último acesso: ${dateTime(user.lastLoginAt)}</span>
+                    <span>Criado em: ${dateTime(user.createdAt)}</span>
+                  </div>
+                  <label class="switch-line compact">
+                    <input type="checkbox" data-user-active="${user.id}" ${user.active ? "checked" : ""} ${Number(user.id) === Number(state.admin.id) ? "disabled" : ""}>
+                    <span>Acesso ativo</span>
+                  </label>
+                  <button class="secondary-button" type="button" data-reset-user-password="${user.id}">Redefinir senha</button>
+                  <button class="primary-button" type="button" data-save-user="${user.id}">Salvar acesso</button>
+                </div>
+              </article>
+            `).join("") || `<div class="empty-state">Nenhum usuário administrativo cadastrado.</div>`}
+          </div>
+        `}
+      </section>
+    </section>
+  `;
+}
+
 function summaryCard(label, value) {
   return `
     <div class="summary-card">
@@ -612,6 +1007,7 @@ function renderOrderModal(order) {
         <div class="modal-body">
           <div class="detail-grid">
             ${detailCard("Cliente", order.customerName)}
+            ${detailCard("Unidade", order.unitName || "—")}
             ${detailCard("WhatsApp", order.customerPhone)}
             ${detailCard("Pagamento", `${PAYMENT_METHOD_TEXT[order.paymentMethod] || order.paymentMethod} · ${PAYMENT_STATUS_TEXT[order.paymentStatus] || order.paymentStatus}`)}
             ${detailCard("Criado em", dateTime(order.createdAt))}
@@ -691,7 +1087,7 @@ function renderProductModal(product) {
                 <label for="productDescription">Descrição</label>
                 <textarea id="productDescription" rows="3" maxlength="500" placeholder="Ex.: Long Neck 330ml">${escapeHtml(product.description || "")}</textarea>
               </div>
-              <div class="form-row">
+              <div class="form-row product-basic-row">
                 <div class="field">
                   <label for="productCategory">Categoria</label>
                   <select id="productCategory" class="status-select" required>
@@ -705,15 +1101,41 @@ function renderProductModal(product) {
                   <label for="productPrice">Preço normal</label>
                   <input id="productPrice" type="number" min="0" step="0.01" value="${product.price ?? ""}" required>
                 </div>
-                <div class="field">
-                  <label for="productStock">Estoque</label>
-                  <input id="productStock" type="number" min="0" step="1" value="${product.stockQuantity ?? 0}" required>
-                </div>
               </div>
               <label class="switch-line">
                 <input id="productActive" type="checkbox" ${product.active !== false ? "checked" : ""}>
                 <span>Produto ativo no catálogo</span>
               </label>
+            </section>
+
+            <section class="unit-inventory-editor">
+              <div class="promotion-heading">
+                <div>
+                  <strong>Disponibilidade e estoque por unidade</strong>
+                  <span>Defina em quais lojas este produto é vendido e a quantidade de cada uma.</span>
+                </div>
+              </div>
+              <div class="unit-inventory-grid">
+                ${ADMIN_UNITS.map((unit) => {
+                  const inventory = productUnitInventory(product, unit.id);
+                  return `
+                    <div class="unit-inventory-card">
+                      <div>
+                        <strong>${escapeHtml(unit.name)}</strong>
+                        <label class="switch-line compact">
+                          <input id="productUnitActive-${unit.id}" type="checkbox" ${inventory.active ? "checked" : ""}>
+                          <span>Vender nesta unidade</span>
+                        </label>
+                      </div>
+                      <label class="field">
+                        <span>Quantidade em estoque</span>
+                        <input id="productUnitStock-${unit.id}" type="number" min="0" step="1" value="${inventory.stockQuantity}" required>
+                      </label>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+              <small>Estoque zero deixa o produto indisponível para compra naquela unidade, mesmo que a opção “Vender nesta unidade” esteja marcada.</small>
             </section>
 
             <section class="promotion-editor">
@@ -764,11 +1186,6 @@ function bindCommonEvents() {
     button.addEventListener("click", () => navigateManager(button.dataset.managerView));
   });
 
-  document.querySelectorAll("[data-manager-future]").forEach((button) => {
-    button.addEventListener("click", () => {
-      alert(`${button.dataset.managerFuture}: vamos construir essa área depois do catálogo.`);
-    });
-  });
 }
 
 function bindCurrentViewEvents() {
@@ -785,9 +1202,78 @@ function bindCurrentViewEvents() {
     return;
   }
 
+  if (state.view === "settings") {
+    document.getElementById("settingsForm")?.addEventListener("submit", saveSettings);
+    document.querySelectorAll("[data-unit-setting]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const label = input.closest(".switch-control")?.querySelector("em");
+        const row = input.closest(".unit-setting-row");
+
+        if (label) {
+          label.textContent = input.checked
+            ? "Aberta 24 horas"
+            : "Fechada temporariamente";
+        }
+
+        if (row) {
+          row.classList.toggle("unit-open", input.checked);
+          row.classList.toggle("unit-closed", !input.checked);
+        }
+      });
+    });
+    return;
+  }
+
+  if (state.view === "users") {
+    document.getElementById("userCreateForm")?.addEventListener("submit", createAdminUser);
+
+    const newRole = document.getElementById("newUserRole");
+    const newUnit = document.getElementById("newUserUnit");
+    const syncNewUserUnit = () => {
+      if (!newRole || !newUnit) return;
+      const operator = newRole.value === "operator";
+      newUnit.disabled = !operator;
+      newUnit.required = operator;
+      if (!operator) newUnit.value = "";
+    };
+    newRole?.addEventListener("change", syncNewUserUnit);
+    syncNewUserUnit();
+
+    document.querySelectorAll("[data-user-role]").forEach((roleSelect) => {
+      const userId = Number(roleSelect.dataset.userRole);
+      const unitSelect = document.querySelector(`[data-user-unit="${userId}"]`);
+      const help = document.querySelector(`[data-user-unit-field="${userId}"] .cell-sub`);
+      const sync = () => {
+        if (!unitSelect) return;
+        const operator = roleSelect.value === "operator";
+        unitSelect.disabled = !operator;
+        unitSelect.required = operator;
+        if (!operator) unitSelect.value = "";
+        if (help) help.textContent = operator
+          ? "Este operador verá somente os pedidos desta unidade."
+          : "Gerentes visualizam todas as unidades.";
+      };
+      roleSelect.addEventListener("change", sync);
+      sync();
+    });
+
+    document.querySelectorAll("[data-save-user]").forEach((button) => {
+      button.addEventListener("click", () => saveAdminUser(Number(button.dataset.saveUser), button));
+    });
+
+    document.querySelectorAll("[data-reset-user-password]").forEach((button) => {
+      button.addEventListener("click", () => resetAdminUserPassword(Number(button.dataset.resetUserPassword)));
+    });
+    return;
+  }
+
   document.getElementById("newProductButton")?.addEventListener("click", () => openProduct());
   document.getElementById("newPromotionButton")?.addEventListener("click", openPromotionChooser);
   document.getElementById("reloadCatalogButton")?.addEventListener("click", loadManagerCatalog);
+  document.getElementById("stockUnitSelect")?.addEventListener("change", (event) => {
+    state.stockUnit = event.target.value;
+    renderDashboard();
+  });
 
   const searchInput = document.getElementById("productSearch");
   if (searchInput) {
@@ -812,6 +1298,10 @@ function bindCurrentViewEvents() {
   });
 
   document.getElementById("categoryForm")?.addEventListener("submit", createCategory);
+
+  document.querySelectorAll("[data-save-category-icon]").forEach((button) => {
+    button.addEventListener("click", () => saveCategoryIcon(Number(button.dataset.saveCategoryIcon), button));
+  });
 }
 
 function bindModalEvents() {
@@ -868,7 +1358,7 @@ async function request(url, options = {}) {
 async function login(event) {
   event.preventDefault();
   state.loginError = "";
-  const email = document.getElementById("adminEmail").value.trim();
+  const login = document.getElementById("adminLogin").value.trim();
   const senha = document.getElementById("adminSenha").value;
   const button = event.submitter;
   button.disabled = true;
@@ -877,7 +1367,7 @@ async function login(event) {
   try {
     const data = await request("/api/admin/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, senha })
+      body: JSON.stringify({ login, senha })
     });
     state.admin = data.admin;
     state.view = "orders";
@@ -894,6 +1384,8 @@ async function logout() {
   state.orders = [];
   state.products = [];
   state.categories = [];
+  state.users = [];
+  state.settings = null;
   state.selectedOrder = null;
   state.selectedProduct = null;
   renderLogin();
@@ -971,6 +1463,215 @@ async function loadManagerCatalog(shouldRender = true) {
   }
 }
 
+
+async function loadSettings() {
+  if (!isManager()) return;
+  state.settingsLoading = true;
+  renderDashboard();
+
+  try {
+    const data = await request("/api/admin/manager/settings");
+    state.settings = data.settings || null;
+  } catch (error) {
+    if (error.status === 401) {
+      state.admin = null;
+      renderLogin();
+      return;
+    }
+    alert(error.message);
+  } finally {
+    state.settingsLoading = false;
+    if (state.admin && state.view === "settings") renderDashboard();
+  }
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+
+  const button = document.getElementById("saveSettingsButton");
+  const message = document.getElementById("settingsMessage");
+
+  const unitActive = (id) =>
+    document.querySelector(`[data-unit-setting="${id}"]`)?.checked !== false;
+
+  const body = {
+    storeName: document.getElementById("settingsStoreName").value.trim(),
+    whatsapp: document.getElementById("settingsWhatsapp").value.trim(),
+    storeOpen: true,
+    deliveryLabel: document.getElementById("settingsDeliveryLabel").value.trim(),
+    delivery: {
+      pricePerKm: Number(document.getElementById("settingsPricePerKm").value),
+      minimumFee: Number(document.getElementById("settingsMinimumFee").value),
+      maxDistanceKm: Number(document.getElementById("settingsMaxDistance").value),
+      windowMinutes: Number(document.getElementById("settingsWindowMinutes").value),
+      dispatchBufferMinutes: Number(document.getElementById("settingsDispatchBuffer").value)
+    },
+    units: {
+      julio: { active: unitActive("julio") },
+      vila: { active: unitActive("vila") },
+      divino: { active: unitActive("divino") }
+    }
+  };
+
+  button.disabled = true;
+  button.textContent = "Salvando...";
+  message.className = "message";
+  message.textContent = "";
+
+  try {
+    const data = await request("/api/admin/manager/settings", {
+      method: "PUT",
+      body: JSON.stringify(body)
+    });
+
+    state.settings = data.settings;
+    message.className = "message success";
+    message.textContent = "Configurações salvas com sucesso.";
+  } catch (error) {
+    message.className = "message error";
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Salvar configurações";
+  }
+}
+
+async function loadAdminUsers() {
+  if (!isManager()) return;
+  state.usersLoading = true;
+  renderDashboard();
+
+  try {
+    const data = await request("/api/admin/manager/users");
+    state.users = data.users || [];
+  } catch (error) {
+    if (error.status === 401) {
+      state.admin = null;
+      renderLogin();
+      return;
+    }
+    alert(error.message);
+  } finally {
+    state.usersLoading = false;
+    if (state.admin && state.view === "users") renderDashboard();
+  }
+}
+
+async function createAdminUser(event) {
+  event.preventDefault();
+
+  // event.currentTarget fica nulo depois de um await em alguns navegadores.
+  // Guardamos a referência do formulário antes da requisição assíncrona.
+  const form = event.currentTarget;
+  const button = document.getElementById("createUserButton");
+  const message = document.getElementById("userCreateMessage");
+
+  const role = document.getElementById("newUserRole").value;
+  const body = {
+    name: document.getElementById("newUserName").value.trim(),
+    login: document.getElementById("newUserLogin").value.trim(),
+    email: document.getElementById("newUserEmail").value.trim(),
+    role,
+    unitId: role === "operator" ? document.getElementById("newUserUnit").value : null,
+    senha: document.getElementById("newUserPassword").value
+  };
+
+  button.disabled = true;
+  button.textContent = "Criando...";
+  message.className = "message";
+  message.textContent = "";
+
+  try {
+    await request("/api/admin/manager/users", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+
+    form.reset();
+    message.className = "message success";
+    message.textContent = "Usuário criado com sucesso.";
+    await loadAdminUsers();
+  } catch (error) {
+    message.className = "message error";
+    message.textContent = error.message;
+    button.disabled = false;
+    button.textContent = "Criar usuário";
+  }
+}
+
+async function saveAdminUser(userId, button) {
+  const name = document.querySelector(`[data-user-name="${userId}"]`)?.value.trim();
+  const login = document.querySelector(`[data-user-login="${userId}"]`)?.value.trim();
+  const email = document.querySelector(`[data-user-email="${userId}"]`)?.value.trim();
+  const role = document.querySelector(`[data-user-role="${userId}"]`)?.value;
+  const unitId = role === "operator"
+    ? document.querySelector(`[data-user-unit="${userId}"]`)?.value
+    : null;
+  const activeInput = document.querySelector(`[data-user-active="${userId}"]`);
+  const active = activeInput ? activeInput.checked : true;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Salvando...";
+
+  try {
+    const data = await request(`/api/admin/manager/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, login, email, role, unitId, active })
+    });
+
+    if (Number(userId) === Number(state.admin.id)) {
+      state.admin = {
+        ...state.admin,
+        name: data.user.name,
+        login: data.user.login,
+        email: data.user.email,
+        role: data.user.role,
+        unitId: data.user.unitId || null
+      };
+    }
+
+    await loadAdminUsers();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+async function resetAdminUserPassword(userId) {
+  const user = state.users.find((item) => Number(item.id) === Number(userId));
+  if (!user) return;
+
+  const senha = window.prompt(
+    `Digite a nova senha para ${user.name} (mínimo 8 caracteres):`
+  );
+
+  if (senha === null) return;
+  if (senha.length < 8) {
+    alert("A nova senha deve ter pelo menos 8 caracteres.");
+    return;
+  }
+
+  const confirmacao = window.prompt("Digite a nova senha novamente:");
+  if (confirmacao === null) return;
+
+  if (senha !== confirmacao) {
+    alert("As senhas não coincidem.");
+    return;
+  }
+
+  try {
+    await request(`/api/admin/manager/users/${userId}/password`, {
+      method: "PATCH",
+      body: JSON.stringify({ senha })
+    });
+    alert("Senha redefinida com sucesso.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
 async function navigateManager(view) {
   if (!isManager()) return;
   state.view = view;
@@ -981,6 +1682,10 @@ async function navigateManager(view) {
 
   if (["products", "stock", "categories", "promotions"].includes(view)) {
     await loadManagerCatalog();
+  } else if (view === "settings") {
+    await loadSettings();
+  } else if (view === "users") {
+    await loadAdminUsers();
   } else {
     renderDashboard();
   }
@@ -1041,6 +1746,10 @@ function blankProduct() {
     category: state.categories[0]?.name || "",
     price: "",
     stockQuantity: 0,
+    unitStock: Object.fromEntries(ADMIN_UNITS.map((unit) => [
+      unit.id,
+      { stockQuantity: 0, active: true }
+    ])),
     imageUrl: null,
     active: true,
     promotionPrice: null,
@@ -1164,7 +1873,13 @@ async function saveProduct(event) {
     description: document.getElementById("productDescription").value.trim(),
     category: document.getElementById("productCategory").value,
     price: Number(document.getElementById("productPrice").value),
-    stockQuantity: Number(document.getElementById("productStock").value),
+    unitStock: Object.fromEntries(ADMIN_UNITS.map((unit) => [
+      unit.id,
+      {
+        stockQuantity: Number(document.getElementById(`productUnitStock-${unit.id}`).value),
+        active: document.getElementById(`productUnitActive-${unit.id}`).checked
+      }
+    ])),
     active: document.getElementById("productActive").checked,
     promotionActive: document.getElementById("promotionActive").checked,
     promotionPrice: document.getElementById("promotionPrice").value,
@@ -1198,14 +1913,20 @@ async function saveProduct(event) {
 
 async function saveStock(productId, button) {
   const input = document.querySelector(`[data-stock-input="${productId}"]`);
-  if (!input) return;
+  const activeInput = document.querySelector(`[data-stock-active="${productId}"]`);
+  if (!input || !activeInput) return;
+
   button.disabled = true;
   button.textContent = "Salvando...";
 
   try {
     await request(`/api/admin/manager/products/${productId}/stock`, {
       method: "PATCH",
-      body: JSON.stringify({ stockQuantity: Number(input.value) })
+      body: JSON.stringify({
+        unitId: state.stockUnit,
+        stockQuantity: Number(input.value),
+        active: activeInput.checked
+      })
     });
     await loadManagerCatalog();
   } catch (error) {
@@ -1218,8 +1939,16 @@ async function saveStock(productId, button) {
 async function createCategory(event) {
   event.preventDefault();
   const input = document.getElementById("categoryName");
-  const button = event.submitter;
+  const iconInput = document.querySelector('input[name="categoryIcon"]:checked');
+  const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
   const message = document.getElementById("categoryMessage");
+
+  if (!iconInput) {
+    message.className = "message error";
+    message.textContent = "Escolha um ícone para a categoria.";
+    return;
+  }
+
   button.disabled = true;
   button.textContent = "Adicionando...";
   message.textContent = "";
@@ -1228,7 +1957,10 @@ async function createCategory(event) {
   try {
     await request("/api/admin/manager/categories", {
       method: "POST",
-      body: JSON.stringify({ name: input.value.trim() })
+      body: JSON.stringify({
+        name: input.value.trim(),
+        icon: iconInput.value
+      })
     });
     await loadManagerCatalog();
   } catch (error) {
@@ -1236,6 +1968,27 @@ async function createCategory(event) {
     message.textContent = error.message;
     button.disabled = false;
     button.textContent = "Adicionar categoria";
+  }
+}
+
+async function saveCategoryIcon(categoryId, button) {
+  const select = document.querySelector(`[data-category-icon-select="${categoryId}"]`);
+  if (!select) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Salvando...";
+
+  try {
+    await request(`/api/admin/manager/categories/${categoryId}/icon`, {
+      method: "PATCH",
+      body: JSON.stringify({ icon: select.value })
+    });
+    await loadManagerCatalog();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+    button.textContent = originalText;
   }
 }
 

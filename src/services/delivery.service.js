@@ -1,3 +1,5 @@
+const { getStoreSettings, defaultDeliverySettings } = require("./store-settings.service");
+
 const money = (value) => Number(Number(value).toFixed(2));
 
 const UNIT_ADDRESSES = {
@@ -53,19 +55,19 @@ const geocodeCache = new Map();
 const quoteCache = new Map();
 let lastNominatimRequestAt = 0;
 
-function numberEnv(name, fallback) {
-  const raw = String(process.env[name] ?? "").trim().replace(",", ".");
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
-}
+async function deliverySettings(unitId = null) {
+  const store = await getStoreSettings();
+  const defaults = defaultDeliverySettings();
 
-function deliverySettings() {
   return {
-    pricePerKm: Math.max(0, numberEnv("DELIVERY_PRICE_PER_KM", 0)),
-    minimumFee: Math.max(0, numberEnv("DELIVERY_MIN_FEE", 0)),
-    maxDistanceKm: Math.max(0.5, numberEnv("DELIVERY_MAX_DISTANCE_KM", 15)),
-    windowMinutes: Math.max(5, Math.round(numberEnv("DELIVERY_WINDOW_MINUTES", 10))),
-    dispatchBufferMinutes: Math.max(0, Math.round(numberEnv("DELIVERY_DISPATCH_BUFFER_MINUTES", 5)))
+    pricePerKm: Number(store.delivery?.pricePerKm ?? defaults.pricePerKm),
+    minimumFee: Number(store.delivery?.minimumFee ?? defaults.minimumFee),
+    maxDistanceKm: Number(store.delivery?.maxDistanceKm ?? defaults.maxDistanceKm),
+    windowMinutes: Number(store.delivery?.windowMinutes ?? defaults.windowMinutes),
+    dispatchBufferMinutes: Number(
+      store.delivery?.dispatchBufferMinutes ?? defaults.dispatchBufferMinutes
+    ),
+    unitActive: unitId ? store.units?.[unitId]?.active !== false : true
   };
 }
 
@@ -290,7 +292,7 @@ function roundUpToFive(value) {
   return Math.max(5, Math.ceil(Number(value) / 5) * 5);
 }
 
-function calculateQuoteFromRoute(route, settings = deliverySettings()) {
+function calculateQuoteFromRoute(route, settings = defaultDeliverySettings()) {
   const distanceKm = Number(route.distanceKm);
   const travelMinutes = Number(route.travelMinutes);
 
@@ -341,7 +343,15 @@ async function quoteDelivery(unitId, address) {
     throw error;
   }
 
-  const settings = deliverySettings();
+  const settings = await deliverySettings(unitId);
+
+  if (!settings.unitActive) {
+    const error = new Error("A unidade selecionada está temporariamente indisponível.");
+    error.status = 400;
+    error.code = "UNIT_INACTIVE";
+    throw error;
+  }
+
   const cacheKey = [
     unitId,
     addressKey,

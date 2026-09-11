@@ -560,6 +560,54 @@ button:disabled {
     background: #15904c;
 }
 
+.fechado {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    margin-top: 8px;
+
+    background: #fff0f0;
+
+    color: #c63d3d;
+
+    border-radius: 7px;
+
+    padding: 5px 8px;
+
+    font-size: 11px;
+
+    font-weight: bold;
+}
+
+.fechado .ponto {
+
+    width: 6px;
+
+    height: 6px;
+
+    border-radius: 50%;
+
+    background: #c63d3d;
+}
+
+.unidade-fechada {
+
+    opacity: .72;
+
+    cursor: not-allowed;
+
+    transform: none !important;
+}
+
+.unidade-fechada .unidade-img {
+
+    filter: grayscale(.35);
+}
+
 .unidade-seta {
 
     color: var(--cinza);

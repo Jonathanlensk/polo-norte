@@ -1,6 +1,10 @@
 const db = require("../../database/db");
 const { quoteDelivery } = require("./delivery.service");
 const { ensureCatalogSchema, promotionCondition } = require("./catalog.service");
+const {
+  assertStoreId,
+  ensureStoreInventorySchema
+} = require("./store-inventory.service");
 
 const money = (value) =>
   Number(Number(value).toFixed(2));
@@ -28,12 +32,17 @@ const units = {
 // =========================
 
 async function calculateCart(items, unitId, deliveryAddress = null) {
-  await ensureCatalogSchema();
+  await Promise.all([
+    ensureCatalogSchema(),
+    ensureStoreInventorySchema()
+  ]);
+
   if (!Array.isArray(items) || !items.length) {
     throw new Error("Carrinho vazio.");
   }
 
-  const unit = units[unitId];
+  const normalizedUnitId = assertStoreId(unitId);
+  const unit = units[normalizedUnitId];
 
   if (!unit) {
     throw new Error("Unidade inválida.");
@@ -56,13 +65,17 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
           THEN p.promotion_price::float
           ELSE p.price::float
         END AS price,
-        p.stock_quantity,
+        COALESCE(s.stock_quantity, 0)::int AS stock_quantity,
+        COALESCE(s.active, FALSE) AS store_active,
         p.active
       FROM products p
+      LEFT JOIN store_product_stock s
+        ON s.product_id = p.id
+       AND s.store_id = $2
       WHERE p.id = ANY($1::bigint[])
         AND p.active = TRUE
     `,
-    [ids]
+    [ids, normalizedUnitId]
   );
 
   const productsById = new Map(
@@ -87,6 +100,12 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
       );
     }
 
+    if (!product.store_active) {
+      throw new Error(
+        `${product.name} não está disponível nesta unidade.`
+      );
+    }
+
     if (
       !Number.isInteger(quantidade) ||
       quantidade < 1 ||
@@ -97,9 +116,9 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
       );
     }
 
-    if (quantidade > product.stock_quantity) {
+    if (quantidade > Number(product.stock_quantity || 0)) {
       throw new Error(
-        `Estoque insuficiente para ${product.name}. Disponível: ${product.stock_quantity}.`
+        `Estoque insuficiente para ${product.name}. Disponível nesta unidade: ${Number(product.stock_quantity || 0)}.`
       );
     }
 
@@ -117,7 +136,7 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
   let entregaDetalhes = null;
 
   if (deliveryAddress) {
-    entregaDetalhes = await quoteDelivery(unitId, deliveryAddress);
+    entregaDetalhes = await quoteDelivery(normalizedUnitId, deliveryAddress);
     entrega = entregaDetalhes.fee;
   }
 
@@ -126,7 +145,11 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
     subtotal: money(subtotal),
     entrega: money(entrega),
     total: money(subtotal + entrega),
-    unidade: unit,
+    unidade: {
+      ...unit,
+      id: normalizedUnitId
+    },
+    unidadeId: normalizedUnitId,
     entregaDetalhes
   };
 

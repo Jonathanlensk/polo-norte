@@ -44,7 +44,7 @@ function home() {
             <div class="beneficios">
                 <div class="beneficio">
                     ${icon("relogio", 14)}
-                    Entrega em até 60 min
+                    ${textoSeguro(CONFIG.loja.entregaTexto)}
                 </div>
 
                 <div class="beneficio">
@@ -73,10 +73,12 @@ function home() {
 
             <div class="unidades">
 
-                ${unidades.map(unidade => `
+                ${unidades.length ? unidades.map(unidade => `
                     <button
-                        class="unidade"
-                        onclick="escolherUnidade('${unidade.id}')"
+                        class="unidade ${unidade.aberta === false ? "unidade-fechada" : ""}"
+                        ${unidade.aberta === false
+                            ? 'disabled aria-disabled="true"'
+                            : `onclick="escolherUnidade('${unidade.id}')"`}
                     >
 
                         <div class="unidade-img">
@@ -92,9 +94,9 @@ function home() {
                                 ${unidade.endereco}
                             </p>
 
-                            <span class="aberto">
+                            <span class="${unidade.aberta === false ? "fechado" : "aberto"}">
                                 <span class="ponto"></span>
-                                Aberto até 00:00
+                                ${textoSeguro(unidade.status || "Aberto 24 horas")}
                             </span>
 
                         </div>
@@ -104,7 +106,12 @@ function home() {
                         </span>
 
                     </button>
-                `).join("")}
+                `).join("") : `
+                    <div class="pedido-card">
+                        <strong>Nenhuma unidade disponível no momento.</strong>
+                        <p>Tente novamente em alguns minutos.</p>
+                    </div>
+                `}
 
             </div>
 
@@ -113,8 +120,12 @@ function home() {
 }
 
 function cardProduto(produto) {
+    const indisponivel =
+        produto.disponivelNaUnidade === false ||
+        Number(produto.estoque || 0) <= 0;
+
     return `
-        <article class="produto">
+        <article class="produto ${indisponivel ? "produto-indisponivel" : ""}">
 
             ${
                 produto.precoOriginal
@@ -177,10 +188,17 @@ function cardProduto(produto) {
 
             </div>
 
+            ${indisponivel ? `
+                <span class="produto-indisponivel-label">Indisponível nesta unidade</span>
+            ` : Number(produto.estoque || 0) <= 5 ? `
+                <span class="produto-estoque-baixo">Últimas ${Number(produto.estoque || 0)} unidades</span>
+            ` : ""}
+
             <button
                 class="add"
                 onclick="adicionar(${produto.id})"
                 aria-label="Adicionar ${produto.nome} ao carrinho"
+                ${indisponivel ? 'disabled aria-disabled="true"' : ""}
             >
                 +
             </button>
@@ -258,7 +276,7 @@ function menu() {
                     <h2>${estado.unidade.nome}</h2>
 
                     <span class="status">
-                        ● Aberto até 00:00 · Entrega rápida
+                        ● ${textoSeguro(estado.unidade?.status || "Aberto 24 horas")} · ${textoSeguro(CONFIG.loja.entregaTexto)}
                     </span>
 
                 </div>

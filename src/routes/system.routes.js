@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../../database/db");
+const { getStoreSettings, publicSettings } = require("../services/store-settings.service");
 
 const router = express.Router();
 
@@ -45,6 +46,24 @@ router.get("/api/health", async (req, res) => {
   }
 });
 
+
+
+
+router.get("/api/store/settings", async (req, res) => {
+  try {
+    const settings = await getStoreSettings();
+    return res.json({
+      ok: true,
+      settings: publicSettings(settings)
+    });
+  } catch (error) {
+    console.error("GET /api/store/settings:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Não foi possível carregar as configurações da loja."
+    });
+  }
+});
 
 // =========================
 // CONFIG

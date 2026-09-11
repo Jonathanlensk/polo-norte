@@ -50,11 +50,17 @@ async function atualizarCatalogoSilencioso() {
     atualizandoCatalogoCliente = true;
 
     try {
-        await carregarProdutos();
+        await Promise.all([
+            carregarProdutos(),
+            carregarConfiguracoesLoja()
+        ]);
 
-        // Só redesenha telas relacionadas ao catálogo para não interromper
-        // pagamento/endereço enquanto o cliente está preenchendo dados.
+        // Atualiza também o status das unidades. Se a unidade que o cliente
+        // estava usando for fechada pelo gerente, volta para a seleção de loja.
         if (["menu", "carrinho", "favoritos"].includes(estado.tela)) {
+            if (!estado.unidade) {
+                estado.tela = "home";
+            }
             render();
         }
     } catch (erro) {
@@ -83,7 +89,8 @@ setInterval(() => {
 async function iniciarApp() {
     await Promise.all([
         carregarProdutos(),
-        carregarCliente()
+        carregarCliente(),
+        carregarConfiguracoesLoja()
     ]);
 
     carregarFavoritosLocais();

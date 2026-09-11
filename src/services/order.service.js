@@ -38,6 +38,7 @@ async function saveOrderToDatabase({
   metodo,
   endereco,
   cart,
+  unitId,
   customerId,
   customerAddressId
 }) {
@@ -71,6 +72,7 @@ async function saveOrderToDatabase({
     `
       INSERT INTO orders (
         order_number,
+        unit_id,
         customer_id,
         customer_address_id,
         customer_name,
@@ -89,15 +91,15 @@ async function saveOrderToDatabase({
         mercado_pago_payment_id
       )
       VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15,
-        $16, $17
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17, $18
       )
       RETURNING id
     `,
     [
       orderNumber,
+      unitId || cart?.unidadeId || cart?.unidade?.id || null,
       customerId || null,
       customerAddressId || null,
       endereco.nome,

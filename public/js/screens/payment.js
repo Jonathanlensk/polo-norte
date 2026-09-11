@@ -388,16 +388,6 @@ function pixPagamento() {
                     ⏳ Aguardando confirmação do pagamento...
                 </div>
 
-                <button
-                    class="botao-principal"
-                    style="
-                        margin-top:15px;
-                        background:#f59e0b;
-                    "
-                    onclick="simularPagamentoPix()"
-                >
-                    🧪 Simular pagamento aprovado
-                </button>
 
             </div>
 
@@ -561,65 +551,4 @@ function pararVerificacaoPix() {
     }
 
     verificandoPix = false;
-}
-
-
-/*
-    SIMULA O PAGAMENTO APROVADO
-*/
-async function simularPagamentoPix() {
-
-    const orderId =
-        estado.pix?.mercadoPagoOrderId;
-
-    if (!orderId) {
-
-        alert(
-            "ID do pedido não encontrado."
-        );
-
-        return;
-    }
-
-    try {
-
-        const resposta = await fetch(
-            `/api/test/approve/${encodeURIComponent(orderId)}`,
-            {
-                method: "POST"
-            }
-        );
-
-        const resultado =
-            await resposta.json();
-
-        if (!resposta.ok) {
-
-            throw new Error(
-                resultado.message ||
-                "Erro ao simular pagamento."
-            );
-        }
-
-        console.log(
-            "PAGAMENTO SIMULADO:",
-            resultado
-        );
-
-        /*
-            VERIFICA IMEDIATAMENTE
-        */
-        await verificarPagamentoPix();
-
-    } catch (erro) {
-
-        console.error(
-            "Erro simulando pagamento:",
-            erro
-        );
-
-        alert(
-            erro.message
-        );
-    }
 }

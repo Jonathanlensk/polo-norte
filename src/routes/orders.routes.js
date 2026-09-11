@@ -3,8 +3,7 @@ const { randomUUID } = require("crypto");
 const db = require("../../database/db");
 const { identificarClienteOpcional } = require("../middleware/auth.middleware");
 const { calculateCart } = require("../services/cart.service");
-const { ensureInventorySchema, reserveStockForOrder } = require("../services/inventory.service");
-const { findOrder, saveOrderToDatabase } = require("../services/order.service");
+const { saveOrderToDatabase } = require("../services/order.service");
 const {
   mpRequest,
   getPaymentStatus,
@@ -218,6 +217,7 @@ await saveOrderToDatabase({
       : metodo,
   endereco,
   cart,
+  unitId: cart.unidadeId || unidadeId,
   customerId: req.customerId || null,
   customerAddressId
 });
@@ -281,29 +281,6 @@ await saveOrderToDatabase({
 
 router.get("/api/orders/:id", async (req, res) => {
   try {
-    const local =
-  await findOrder(req.params.id);
-
-    // Pagamento simulado
-    if (local?.testApproved) {
-      return res.json({
-        orderId:
-          local.mercadoPagoOrderId,
-
-        paymentId:
-          local.mercadoPagoPaymentId ||
-          null,
-
-        orderNumber:
-          local.orderNumber,
-
-        status: "approved",
-
-        statusDetail:
-          "accredited"
-      });
-    }
-
     const mpOrder =
       await getMpOrder(req.params.id);
 
@@ -406,97 +383,6 @@ router.post(
         "Webhook Mercado Pago:",
         error.details || error
       );
-    }
-  }
-);
-
-
-// =========================
-// TESTE - APROVAR PIX
-// =========================
-
-router.post(
-  "/api/test/approve/:id",
-  async (req, res) => {
-    try {
-      const orderId = String(req.params.id);
-
-      const result = await db.query(
-        `
-          UPDATE orders
-          SET
-            payment_status = 'approved',
-            payment_status_detail = 'accredited',
-            test_approved = TRUE,
-            updated_at = NOW()
-          WHERE mercado_pago_order_id = $1
-          RETURNING
-            id,
-            order_number,
-            mercado_pago_order_id,
-            mercado_pago_payment_id
-        `,
-        [orderId]
-      );
-
-      const order = result.rows[0];
-
-      if (!order) {
-        return res.status(404).json({
-          message: "Pedido não encontrado."
-        });
-      }
-
-      await db.query(
-        `
-          UPDATE payments
-          SET
-            status = 'approved',
-            approved_at = COALESCE(
-              approved_at,
-              NOW()
-            ),
-            updated_at = NOW()
-          WHERE order_id = $1
-        `,
-        [order.id]
-      );
-
-      await ensureInventorySchema();
-      await reserveStockForOrder(order.id);
-
-      console.log(
-        "PAGAMENTO SIMULADO COMO APROVADO:",
-        order.order_number
-      );
-
-      res.json({
-        ok: true,
-
-        orderId:
-          order.mercado_pago_order_id,
-
-        paymentId:
-          order.mercado_pago_payment_id,
-
-        orderNumber:
-          order.order_number,
-
-        status: "approved",
-
-        statusDetail: "accredited"
-      });
-
-    } catch (error) {
-      console.error(
-        "Erro ao simular pagamento:",
-        error
-      );
-
-      res.status(500).json({
-        message:
-          "Erro ao simular pagamento."
-      });
     }
   }
 );

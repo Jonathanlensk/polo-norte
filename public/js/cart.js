@@ -20,7 +20,22 @@ function totalPedido() {
 }
 
 function adicionar(id) {
-    estado.carrinho[id] = (estado.carrinho[id] || 0) + 1;
+    const produto = produtoPorId(id);
+
+    if (!produto || produto.disponivelNaUnidade === false || Number(produto.estoque || 0) <= 0) {
+        mostrarMensagem("Produto indisponível nesta unidade.");
+        return;
+    }
+
+    const quantidadeAtual = Number(estado.carrinho[id] || 0);
+    const estoqueDisponivel = Number(produto.estoque || 0);
+
+    if (quantidadeAtual >= estoqueDisponivel) {
+        mostrarMensagem(`Quantidade máxima disponível: ${estoqueDisponivel}.`);
+        return;
+    }
+
+    estado.carrinho[id] = quantidadeAtual + 1;
     render();
 }
 
@@ -88,13 +103,25 @@ function trocarUnidade() {
     render();
 }
 
-function escolherUnidade(id) {
-    estado.unidade = unidades.find(unidade => unidade.id === id);
+async function escolherUnidade(id) {
+    const novaUnidade = unidades.find(unidade => unidade.id === id);
+    if (!novaUnidade || novaUnidade.aberta === false) return;
+
+    const unidadeAnteriorId = estado.unidade?.id || null;
+
+    if (unidadeAnteriorId && unidadeAnteriorId !== novaUnidade.id) {
+        // O carrinho pertence à unidade escolhida. Ao trocar de loja, limpamos
+        // os itens para não misturar estoques de filiais diferentes.
+        estado.carrinho = {};
+    }
+
+    estado.unidade = novaUnidade;
     invalidarCotacaoEntrega();
     estado.voltarCatalogoPara = null;
     estado.tela = "menu";
+
+    await carregarProdutos();
     render();
-    atualizarCatalogoSilencioso?.();
 }
 
 function emBreve() {
