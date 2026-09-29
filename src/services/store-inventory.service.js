@@ -42,11 +42,12 @@ function normalizeProductInventory(input = {}) {
         ? source[unit.id]
         : {};
 
+      const stockQuantity = parseStockValue(entry.stockQuantity ?? 0);
       return [
         unit.id,
         {
-          stockQuantity: parseStockValue(entry.stockQuantity ?? 0),
-          active: entry.active !== false
+          stockQuantity,
+          active: stockQuantity > 0 && entry.active !== false
         }
       ];
     })
@@ -83,6 +84,21 @@ async function ensureStoreInventorySchema() {
         ON store_product_stock(store_id)
       `);
 
+      await db.query(`
+        ALTER TABLE store_product_stock
+          ADD COLUMN IF NOT EXISTS gtex_price NUMERIC(10,2)
+            CHECK (gtex_price IS NULL OR gtex_price >= 0),
+          ADD COLUMN IF NOT EXISTS gtex_stock_raw INTEGER,
+          ADD COLUMN IF NOT EXISTS gtex_synced_at TIMESTAMPTZ
+      `);
+
+      await db.query(`
+        UPDATE store_product_stock
+        SET active = FALSE, updated_at = NOW()
+        WHERE stock_quantity <= 0
+          AND active = TRUE
+      `);
+
       // Migração compatível com o estoque único existente: cada unidade começa
       // com a quantidade que o produto possuía antes. Depois disso cada loja
       // passa a ser administrada separadamente.
@@ -97,7 +113,7 @@ async function ensureStoreInventorySchema() {
           unit.store_id,
           p.id,
           GREATEST(COALESCE(p.stock_quantity, 0), 0),
-          TRUE
+          GREATEST(COALESCE(p.stock_quantity, 0), 0) > 0
         FROM products p
         CROSS JOIN (
           VALUES ('julio'), ('vila'), ('divino')
@@ -164,7 +180,7 @@ async function updateProductUnitInventory(productId, storeId, input, client = db
   await ensureStoreInventorySchema();
   const normalizedStoreId = assertStoreId(storeId);
   const stockQuantity = parseStockValue(input?.stockQuantity);
-  const active = input?.active !== false;
+  const active = stockQuantity > 0 && input?.active !== false;
 
   const productResult = await client.query(
     `SELECT id FROM products WHERE id = $1 LIMIT 1`,

@@ -61,9 +61,9 @@ async function calculateCart(items, unitId, deliveryAddress = null) {
       SELECT
         p.id,
         p.name,
-        CASE WHEN ${promo}
+        CASE WHEN (${promo}) AND p.promotion_price < COALESCE(s.gtex_price, p.price)
           THEN p.promotion_price::float
-          ELSE p.price::float
+          ELSE COALESCE(s.gtex_price, p.price)::float
         END AS price,
         COALESCE(s.stock_quantity, 0)::int AS stock_quantity,
         COALESCE(s.active, FALSE) AS store_active,

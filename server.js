@@ -13,6 +13,8 @@ const deliveryRoutes = require("./src/routes/delivery.routes");
 const ordersRoutes = require("./src/routes/orders.routes");
 const customerOrdersRoutes = require("./src/routes/customer-orders.routes");
 const adminRoutes = require("./src/routes/admin.routes");
+const gtexRoutes = require("./src/routes/gtex.routes");
+const { startGtexSyncScheduler } = require("./src/services/gtex-sync.service");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -29,6 +31,7 @@ app.use(deliveryRoutes);
 app.use(ordersRoutes);
 app.use(customerOrdersRoutes);
 app.use(adminRoutes);
+app.use(gtexRoutes);
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -38,4 +41,5 @@ app.get("/{*splat}", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Polo Norte Bebidas rodando em http://localhost:${PORT}`);
+  startGtexSyncScheduler();
 });

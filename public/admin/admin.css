@@ -1884,3 +1884,27 @@ textarea,
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Ações rápidas do catálogo / integração GTEX */
+.page-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.category-delete-button {
+  background: #fff1f0;
+  color: var(--danger);
+  border: 1px solid rgba(180, 35, 24, .22);
+}
+
+.category-delete-button:hover:not(:disabled) {
+  background: #ffe3e0;
+}
+
+.category-delete-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}

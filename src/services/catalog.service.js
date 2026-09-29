@@ -80,7 +80,20 @@ async function ensureCatalogSchema() {
             CHECK (promotion_price IS NULL OR promotion_price >= 0),
           ADD COLUMN IF NOT EXISTS promotion_active BOOLEAN NOT NULL DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS promotion_starts_at TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS promotion_ends_at TIMESTAMPTZ
+          ADD COLUMN IF NOT EXISTS promotion_ends_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS gtex_codprod BIGINT,
+          ADD COLUMN IF NOT EXISTS gtex_codbarra VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS gtex_synced_at TIMESTAMPTZ
+      `);
+
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_products_gtex_codprod
+        ON products(gtex_codprod)
+      `);
+
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_products_gtex_codbarra
+        ON products(gtex_codbarra)
       `);
 
       await db.query(`
@@ -89,6 +102,7 @@ async function ensureCatalogSchema() {
           name VARCHAR(100) NOT NULL,
           icon_key VARCHAR(40),
           active BOOLEAN NOT NULL DEFAULT TRUE,
+          manual_deleted BOOLEAN NOT NULL DEFAULT FALSE,
           sort_order INTEGER NOT NULL DEFAULT 0,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -97,7 +111,8 @@ async function ensureCatalogSchema() {
 
       await db.query(`
         ALTER TABLE product_categories
-          ADD COLUMN IF NOT EXISTS icon_key VARCHAR(40)
+          ADD COLUMN IF NOT EXISTS icon_key VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS manual_deleted BOOLEAN NOT NULL DEFAULT FALSE
       `);
 
       await db.query(`
@@ -154,7 +169,7 @@ async function ensureCatalogSchema() {
   return schemaReadyPromise;
 }
 
-async function ensureCategory(name, iconKey = null) {
+async function ensureCategory(name, iconKey = null, options = {}) {
   const category = String(name || "").trim();
 
   if (!category) {
@@ -166,10 +181,11 @@ async function ensureCategory(name, iconKey = null) {
   const selectedIcon = iconKey == null
     ? null
     : normalizeCategoryIcon(iconKey, category);
+  const reactivate = options?.reactivate !== false;
 
   const existing = await db.query(
     `
-      SELECT id, name, icon_key, active, sort_order
+      SELECT id, name, icon_key, active, manual_deleted, sort_order
       FROM product_categories
       WHERE LOWER(name) = LOWER($1)
       LIMIT 1
@@ -180,16 +196,21 @@ async function ensureCategory(name, iconKey = null) {
   if (existing.rows.length) {
     const current = existing.rows[0];
 
-    if (!current.active || selectedIcon) {
+    if (current.manual_deleted && !reactivate) {
+      return current;
+    }
+
+    if (!current.active || current.manual_deleted || selectedIcon) {
       const updated = await db.query(
         `
           UPDATE product_categories
           SET
             active = TRUE,
+            manual_deleted = FALSE,
             icon_key = COALESCE($2, icon_key),
             updated_at = NOW()
           WHERE id = $1
-          RETURNING id, name, icon_key, active, sort_order
+          RETURNING id, name, icon_key, active, manual_deleted, sort_order
         `,
         [current.id, selectedIcon]
       );
@@ -204,7 +225,7 @@ async function ensureCategory(name, iconKey = null) {
     `
       INSERT INTO product_categories (name, icon_key)
       VALUES ($1, $2)
-      RETURNING id, name, icon_key, active, sort_order
+      RETURNING id, name, icon_key, active, manual_deleted, sort_order
     `,
     [category, selectedIcon || defaultCategoryIcon(category)]
   );
@@ -235,7 +256,7 @@ async function updateCategoryIcon(id, iconKey) {
       UPDATE product_categories
       SET icon_key = $2, updated_at = NOW()
       WHERE id = $1 AND active = TRUE
-      RETURNING id, name, icon_key, active, sort_order
+      RETURNING id, name, icon_key, active, manual_deleted, sort_order
     `,
     [categoryId, normalizedIcon]
   );
@@ -260,9 +281,10 @@ async function listActiveCategories() {
   await ensureCatalogSchema();
 
   const result = await db.query(`
-    SELECT id, name, icon_key, active, sort_order
+    SELECT id, name, icon_key, active, manual_deleted, sort_order
     FROM product_categories
     WHERE active = TRUE
+      AND manual_deleted = FALSE
     ORDER BY sort_order ASC, name ASC
   `);
 
@@ -275,11 +297,126 @@ async function listActiveCategories() {
   }));
 }
 
+
+async function listManuallyDeletedCategoryNames() {
+  await ensureCatalogSchema();
+
+  const result = await db.query(`
+    SELECT name
+    FROM product_categories
+    WHERE manual_deleted = TRUE
+  `);
+
+  return result.rows.map((row) => row.name);
+}
+
+async function deleteCategory(id) {
+  await ensureCatalogSchema();
+
+  const categoryId = Number(id);
+  if (!Number.isInteger(categoryId) || categoryId <= 0) {
+    const error = new Error("Categoria inválida.");
+    error.status = 400;
+    throw error;
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const categoryResult = await client.query(
+      `
+        SELECT id, name, active, manual_deleted
+        FROM product_categories
+        WHERE id = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [categoryId]
+    );
+
+    const category = categoryResult.rows[0];
+    if (!category || category.manual_deleted) {
+      const error = new Error("Categoria não encontrada.");
+      error.status = 404;
+      throw error;
+    }
+
+    if (normalizeText(category.name) === "outros") {
+      const error = new Error('A categoria "Outros" é usada pelo sistema como categoria padrão e não pode ser excluída.');
+      error.status = 409;
+      throw error;
+    }
+
+    let fallbackResult = await client.query(
+      `
+        SELECT id, name
+        FROM product_categories
+        WHERE LOWER(name) = LOWER('Outros')
+        LIMIT 1
+        FOR UPDATE
+      `
+    );
+
+    if (!fallbackResult.rows.length) {
+      fallbackResult = await client.query(
+        `
+          INSERT INTO product_categories (name, icon_key, active, manual_deleted)
+          VALUES ('Outros', 'caixa', TRUE, FALSE)
+          RETURNING id, name
+        `
+      );
+    } else {
+      await client.query(
+        `
+          UPDATE product_categories
+          SET active = TRUE, manual_deleted = FALSE, updated_at = NOW()
+          WHERE id = $1
+        `,
+        [fallbackResult.rows[0].id]
+      );
+    }
+
+    const movedResult = await client.query(
+      `
+        UPDATE products
+        SET category = 'Outros', updated_at = NOW()
+        WHERE LOWER(category) = LOWER($1)
+      `,
+      [category.name]
+    );
+
+    await client.query(
+      `
+        UPDATE product_categories
+        SET active = FALSE, manual_deleted = TRUE, updated_at = NOW()
+        WHERE id = $1
+      `,
+      [categoryId]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      id: categoryId,
+      name: category.name,
+      movedProducts: Number(movedResult.rowCount || 0)
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   ensureCatalogSchema,
   ensureCategory,
   updateCategoryIcon,
+  deleteCategory,
   listActiveCategories,
+  listManuallyDeletedCategoryNames,
   isCategoryIconKey,
   promotionCondition
 };

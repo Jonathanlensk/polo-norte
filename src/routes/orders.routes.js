@@ -4,6 +4,7 @@ const db = require("../../database/db");
 const { identificarClienteOpcional } = require("../middleware/auth.middleware");
 const { calculateCart } = require("../services/cart.service");
 const { saveOrderToDatabase } = require("../services/order.service");
+const { trySyncApprovedOrder } = require("../services/gtex-sync.service");
 const {
   mpRequest,
   getPaymentStatus,
@@ -205,7 +206,7 @@ if (req.customerId && enderecoId) {
       statusDetail
     } = getPaymentStatus(mpOrder);
 
-await saveOrderToDatabase({
+const localOrderId = await saveOrderToDatabase({
   orderNumber,
   mpOrder,
   payment,
@@ -221,6 +222,13 @@ await saveOrderToDatabase({
   customerId: req.customerId || null,
   customerAddressId
 });
+
+    // Cartão pode ser aprovado imediatamente. A falha do ERP não deve
+    // impedir a confirmação do pagamento no site; ela fica registrada
+    // no pedido para reenvio pelo painel/endpoint administrativo.
+    if (status === "approved") {
+      setImmediate(() => trySyncApprovedOrder(localOrderId));
+    }
 
     const mpMethod =
       payment.payment_method || {};

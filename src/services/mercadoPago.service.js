@@ -4,6 +4,7 @@ const {
   reserveStockForOrder,
   releaseStockForOrder
 } = require("./inventory.service");
+const { trySyncApprovedOrder } = require("./gtex-sync.service");
 
 const MP_API = "https://api.mercadopago.com";
 
@@ -201,6 +202,13 @@ async function updateLocalOrder(
     }
 
     await client.query("COMMIT");
+
+    // PIX costuma nascer pendente e ser aprovado depois. Quando o Mercado Pago
+    // confirmar o pagamento, envia o pedido ao GTEX uma única vez.
+    if (status === "approved") {
+      setImmediate(() => trySyncApprovedOrder(order.id));
+    }
+
     return order;
   } catch (error) {
     await client.query("ROLLBACK");

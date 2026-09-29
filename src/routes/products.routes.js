@@ -43,7 +43,8 @@ router.get("/api/products", async (req, res) => {
       : `LEFT JOIN LATERAL (
            SELECT
              COALESCE(SUM(sp.stock_quantity), 0)::int AS stock_quantity,
-             BOOL_OR(sp.active) AS active
+             BOOL_OR(sp.active) AS active,
+             MIN(sp.gtex_price) FILTER (WHERE sp.gtex_price IS NOT NULL) AS gtex_price
            FROM store_product_stock sp
            WHERE sp.product_id = p.id
          ) s ON TRUE`;
@@ -55,12 +56,12 @@ router.get("/api/products", async (req, res) => {
           p.name AS nome,
           p.description AS detalhe,
           p.category AS categoria,
-          CASE WHEN ${promo}
+          CASE WHEN (${promo}) AND p.promotion_price < COALESCE(s.gtex_price, p.price)
             THEN p.promotion_price::float
-            ELSE p.price::float
+            ELSE COALESCE(s.gtex_price, p.price)::float
           END AS preco,
-          CASE WHEN ${promo}
-            THEN p.price::float
+          CASE WHEN (${promo}) AND p.promotion_price < COALESCE(s.gtex_price, p.price)
+            THEN COALESCE(s.gtex_price, p.price)::float
             ELSE NULL
           END AS "precoOriginal",
           COALESCE(s.stock_quantity, 0)::int AS estoque,
@@ -71,6 +72,8 @@ router.get("/api/products", async (req, res) => {
         FROM products p
         ${inventoryJoin}
         WHERE p.active = TRUE
+          AND COALESCE(s.active, FALSE) = TRUE
+          AND COALESCE(s.stock_quantity, 0) > 0
         ORDER BY p.id
       `,
       unitId ? [unitId] : []
@@ -81,12 +84,17 @@ router.get("/api/products", async (req, res) => {
       listActiveCategories()
     ]);
 
+    const visibleCategoryNames = new Set(
+      result.rows.map((product) => String(product.categoria || "").trim()).filter(Boolean)
+    );
+    const visibleCategories = categories.filter((category) => visibleCategoryNames.has(category.name));
+
     res.json({
       ok: true,
       unitId,
       products: result.rows,
-      categories: categories.map((category) => category.name),
-      categoryDetails: categories.map((category) => ({
+      categories: visibleCategories.map((category) => category.name),
+      categoryDetails: visibleCategories.map((category) => ({
         name: category.name,
         icon: category.icon
       }))

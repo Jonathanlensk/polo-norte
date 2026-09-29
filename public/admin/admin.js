@@ -451,7 +451,10 @@ function renderCatalogToolbar(title, subtitle, actionText = "+ Novo produto") {
         <h1>${escapeHtml(title)}</h1>
         <p>${escapeHtml(subtitle)}</p>
       </div>
-      <button class="primary-button" id="newProductButton">${escapeHtml(actionText)}</button>
+      <div class="page-actions">
+        <button class="secondary-button" id="syncGtexCatalogButton" type="button">Atualizar tudo do GTEX</button>
+        <button class="primary-button" id="newProductButton">${escapeHtml(actionText)}</button>
+      </div>
     </div>
   `;
 }
@@ -504,7 +507,12 @@ function renderProductsView() {
                     <span class="stock-badge">${productActiveUnitCount(product)}/3</span>
                     <span class="cell-sub">unidades com venda ativa</span>
                   </td>
-                  <td><span class="badge ${product.active ? "approved" : "cancelled"}">${product.active ? "Ativo" : "Desativado"}</span></td>
+                  <td>${(() => {
+                    const activeUnits = productActiveUnitCount(product);
+                    const isAvailable = product.active && activeUnits > 0;
+                    const label = !product.active ? "Desativado" : activeUnits > 0 ? "Ativo" : "Inativo (sem estoque)";
+                    return `<span class="badge ${isAvailable ? "approved" : "cancelled"}">${label}</span>`;
+                  })()}</td>
                   <td><button class="secondary-button" data-edit-product="${product.id}">Editar</button></td>
                 </tr>
               `).join("")}
@@ -648,6 +656,9 @@ function renderCategoriesView() {
                     `).join("")}
                   </select>
                   <button class="secondary-button category-icon-save" type="button" data-save-category-icon="${category.id}">Salvar ícone</button>
+                  ${String(category.name || "").trim().toLowerCase() === "outros"
+                    ? `<button class="secondary-button category-delete-button" type="button" disabled title="Categoria padrão do sistema">Excluir</button>`
+                    : `<button class="secondary-button category-delete-button" type="button" data-delete-category="${category.id}" data-category-name="${escapeHtml(category.name)}" data-category-count="${count}">Excluir</button>`}
                   <span class="badge approved">Ativa</span>
                 </div>
               </div>
@@ -1102,6 +1113,17 @@ function renderProductModal(product) {
                   <input id="productPrice" type="number" min="0" step="0.01" value="${product.price ?? ""}" required>
                 </div>
               </div>
+              <div class="form-row product-basic-row">
+                <div class="field">
+                  <label for="productGtexCodprod">CODPROD GTEX</label>
+                  <input id="productGtexCodprod" type="number" min="1" step="1" value="${product.gtexCodprod ?? ""}" placeholder="Ex.: 1234">
+                </div>
+                <div class="field">
+                  <label for="productGtexCodbarra">CODBARRA GTEX</label>
+                  <input id="productGtexCodbarra" maxlength="80" value="${escapeHtml(product.gtexCodbarra || "")}" placeholder="Código de barras do ERP">
+                </div>
+              </div>
+              <small>Esses campos ligam o produto do site ao GTEX. A atualização geral também importa automaticamente produtos que ainda não existem no site.</small>
               <label class="switch-line">
                 <input id="productActive" type="checkbox" ${product.active !== false ? "checked" : ""}>
                 <span>Produto ativo no catálogo</span>
@@ -1268,6 +1290,7 @@ function bindCurrentViewEvents() {
   }
 
   document.getElementById("newProductButton")?.addEventListener("click", () => openProduct());
+  document.getElementById("syncGtexCatalogButton")?.addEventListener("click", syncGtexCatalog);
   document.getElementById("newPromotionButton")?.addEventListener("click", openPromotionChooser);
   document.getElementById("reloadCatalogButton")?.addEventListener("click", loadManagerCatalog);
   document.getElementById("stockUnitSelect")?.addEventListener("change", (event) => {
@@ -1301,6 +1324,10 @@ function bindCurrentViewEvents() {
 
   document.querySelectorAll("[data-save-category-icon]").forEach((button) => {
     button.addEventListener("click", () => saveCategoryIcon(Number(button.dataset.saveCategoryIcon), button));
+  });
+
+  document.querySelectorAll("[data-delete-category]").forEach((button) => {
+    button.addEventListener("click", () => removeCategory(Number(button.dataset.deleteCategory), button));
   });
 }
 
@@ -1745,6 +1772,9 @@ function blankProduct() {
     description: "",
     category: state.categories[0]?.name || "",
     price: "",
+    gtexCodprod: null,
+    gtexCodbarra: "",
+    gtexSyncedAt: null,
     stockQuantity: 0,
     unitStock: Object.fromEntries(ADMIN_UNITS.map((unit) => [
       unit.id,
@@ -1873,6 +1903,8 @@ async function saveProduct(event) {
     description: document.getElementById("productDescription").value.trim(),
     category: document.getElementById("productCategory").value,
     price: Number(document.getElementById("productPrice").value),
+    gtexCodprod: document.getElementById("productGtexCodprod").value.trim(),
+    gtexCodbarra: document.getElementById("productGtexCodbarra").value.trim(),
     unitStock: Object.fromEntries(ADMIN_UNITS.map((unit) => [
       unit.id,
       {
@@ -1908,6 +1940,45 @@ async function saveProduct(event) {
     message.textContent = error.message;
     button.disabled = false;
     button.textContent = "Salvar produto";
+  }
+}
+
+async function syncGtexCatalog(event) {
+  const button = event?.currentTarget;
+  const previousText = button?.textContent || "Atualizar tudo do GTEX";
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Sincronizando...";
+  }
+
+  try {
+    const data = await request("/api/admin/gtex/sync-all", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    const summary = data.summary || {};
+    await loadManagerCatalog(false);
+    renderDashboard();
+
+    const message = [
+      `GTEX: ${Number(summary.synced || 0)}/${Number(summary.total || 0)} produto(s) com preço/estoque sincronizado(s).`,
+      `${Number(summary.created || 0)} produto(s) novo(s) cadastrado(s) automaticamente.`,
+      `${Number(summary.linkedExisting || 0)} produto(s) existente(s) vinculado(s) ao GTEX.`
+    ].join("\n");
+    if (Number(summary.failed || 0) > 0) {
+      const firstError = summary.errors?.[0]?.message || "Confira a sincronização GTEX.";
+      alert(`${message}\n${summary.failed} falha(s).\n${firstError}`);
+    } else {
+      alert(message);
+    }
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousText;
+    }
   }
 }
 
@@ -1985,6 +2056,32 @@ async function saveCategoryIcon(categoryId, button) {
       body: JSON.stringify({ icon: select.value })
     });
     await loadManagerCatalog();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+async function removeCategory(categoryId, button) {
+  const name = button.dataset.categoryName || "esta categoria";
+  const count = Number(button.dataset.categoryCount || 0);
+  const detail = count > 0
+    ? ` Os ${count} produto(s) desta categoria serão movidos para "Outros".`
+    : "";
+
+  if (!window.confirm(`Excluir a categoria "${name}"?${detail}`)) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Excluindo...";
+
+  try {
+    const data = await request(`/api/admin/manager/categories/${categoryId}`, {
+      method: "DELETE"
+    });
+    await loadManagerCatalog();
+    if (data?.message) alert(data.message);
   } catch (error) {
     alert(error.message);
     button.disabled = false;

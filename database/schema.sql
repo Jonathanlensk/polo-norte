@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS products (
 
     image_url TEXT,
 
+    -- Vínculo opcional com o cadastro do ERP GTEX.
+    gtex_codprod BIGINT,
+    gtex_codbarra VARCHAR(80),
+    gtex_synced_at TIMESTAMPTZ,
+    gtex_managed BOOLEAN NOT NULL DEFAULT FALSE,
+    gtex_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+
     -- Promoção opcional. O preço normal continua em price.
     promotion_price NUMERIC(10,2)
         CHECK (promotion_price IS NULL OR promotion_price >= 0),
@@ -118,6 +125,12 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_active
 ON products(active);
 
+CREATE INDEX IF NOT EXISTS idx_products_gtex_codprod
+ON products(gtex_codprod);
+
+CREATE INDEX IF NOT EXISTS idx_products_gtex_codbarra
+ON products(gtex_codbarra);
+
 
 -- =========================================================
 -- ESTOQUE POR UNIDADE
@@ -130,6 +143,10 @@ CREATE TABLE IF NOT EXISTS store_product_stock (
         ON DELETE CASCADE,
     stock_quantity INTEGER NOT NULL DEFAULT 0
         CHECK (stock_quantity >= 0),
+    gtex_price NUMERIC(10,2)
+        CHECK (gtex_price IS NULL OR gtex_price >= 0),
+    gtex_stock_raw INTEGER,
+    gtex_synced_at TIMESTAMPTZ,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -142,9 +159,24 @@ ON store_product_stock(product_id);
 CREATE INDEX IF NOT EXISTS idx_store_product_stock_store
 ON store_product_stock(store_id);
 
+UPDATE store_product_stock
+SET active = FALSE, updated_at = NOW()
+WHERE stock_quantity <= 0
+  AND active = TRUE;
+
 
 CREATE INDEX IF NOT EXISTS idx_products_category
 ON products(category);
+
+
+-- =========================================================
+-- ESTADO DA SINCRONIZAÇÃO GTEX
+-- =========================================================
+CREATE TABLE IF NOT EXISTS gtex_sync_state (
+    key VARCHAR(80) PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 
 -- =========================================================
@@ -156,6 +188,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
     name VARCHAR(100) NOT NULL,
     icon_key VARCHAR(40),
     active BOOLEAN NOT NULL DEFAULT TRUE,
+    manual_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -165,7 +198,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_product_categories_name_unique
 ON product_categories (LOWER(name));
 
 ALTER TABLE product_categories
-    ADD COLUMN IF NOT EXISTS icon_key VARCHAR(40);
+    ADD COLUMN IF NOT EXISTS icon_key VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS manual_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
 INSERT INTO product_categories (name, icon_key)
 SELECT DISTINCT
@@ -267,6 +301,14 @@ CREATE TABLE IF NOT EXISTS orders (
     -- com o fluxo atual do Mercado Pago.
     mercado_pago_payment_id VARCHAR(100),
 
+    -- Retorno da integração com o ERP GTEX.
+    gtex_numped BIGINT,
+    gtex_numtrans BIGINT,
+    gtex_position VARCHAR(20),
+    gtex_status VARCHAR(120),
+    gtex_synced_at TIMESTAMPTZ,
+    gtex_last_error TEXT,
+
     -- Controle de baixa/devolução de estoque do pedido.
     -- A reserva impede que o mesmo pedido desconte estoque duas vezes.
     stock_reserved_at TIMESTAMPTZ,
@@ -291,6 +333,9 @@ ON orders(order_status);
 
 CREATE INDEX IF NOT EXISTS idx_orders_created_at
 ON orders(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_orders_gtex_numped
+ON orders(gtex_numped);
 
 
 -- =========================================================

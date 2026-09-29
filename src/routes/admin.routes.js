@@ -8,6 +8,7 @@ const {
   ensureCatalogSchema,
   ensureCategory,
   updateCategoryIcon,
+  deleteCategory,
   listActiveCategories,
   isCategoryIconKey,
   promotionCondition
@@ -897,7 +898,10 @@ function mapManagerProduct(row) {
       const entry = rawUnitStock[unit.id] || {};
       return [unit.id, {
         stockQuantity: Number(entry.stockQuantity ?? entry.stock_quantity ?? 0),
-        active: entry.active !== false
+        active: entry.active !== false,
+        gtexPrice: entry.gtexPrice ?? entry.gtex_price ?? null,
+        gtexStockRaw: entry.gtexStockRaw ?? entry.gtex_stock_raw ?? null,
+        gtexSyncedAt: entry.gtexSyncedAt ?? entry.gtex_synced_at ?? null
       }];
     })
   );
@@ -908,6 +912,9 @@ function mapManagerProduct(row) {
     description: row.description || "",
     category: row.category || "",
     price: Number(row.price),
+    gtexCodprod: row.gtex_codprod == null ? null : Number(row.gtex_codprod),
+    gtexCodbarra: row.gtex_codbarra || "",
+    gtexSyncedAt: row.gtex_synced_at || null,
     stockQuantity: Object.values(unitStock).reduce(
       (total, entry) => total + Number(entry.stockQuantity || 0),
       0
@@ -1000,12 +1007,18 @@ router.get(
           p.category,
           p.price,
           p.stock_quantity,
+          p.gtex_codprod,
+          p.gtex_codbarra,
+          p.gtex_synced_at,
           COALESCE((
             SELECT jsonb_object_agg(
               s.store_id,
               jsonb_build_object(
                 'stockQuantity', s.stock_quantity,
-                'active', s.active
+                'active', s.active,
+                'gtexPrice', s.gtex_price,
+                'gtexStockRaw', s.gtex_stock_raw,
+                'gtexSyncedAt', s.gtex_synced_at
               )
             )
             FROM store_product_stock s
@@ -1056,8 +1069,19 @@ router.post(
       const description = String(req.body?.description || "").trim();
       const category = String(req.body?.category || "").trim();
       const price = parseMoney(req.body?.price, "Preço");
+      const gtexCodprodRaw = String(req.body?.gtexCodprod ?? "").trim();
+      const gtexCodprod = gtexCodprodRaw ? Number(gtexCodprodRaw) : null;
+      const gtexCodbarra = String(req.body?.gtexCodbarra || "").trim() || null;
       const unitStock = normalizeProductInventory(req.body?.unitStock || {});
       const active = req.body?.active !== false;
+
+      if (gtexCodprodRaw && (!Number.isInteger(gtexCodprod) || gtexCodprod <= 0)) {
+        return res.status(400).json({ ok: false, message: "CODPROD GTEX inválido." });
+      }
+
+      if (gtexCodbarra && gtexCodbarra.length > 80) {
+        return res.status(400).json({ ok: false, message: "CODBARRA GTEX muito longo." });
+      }
 
       if (!name) {
         return res.status(400).json({ ok: false, message: "Informe o nome do produto." });
@@ -1084,9 +1108,11 @@ router.post(
             promotion_price,
             promotion_active,
             promotion_starts_at,
-            promotion_ends_at
+            promotion_ends_at,
+            gtex_codprod,
+            gtex_codbarra
           )
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           RETURNING *
         `,
         [
@@ -1100,7 +1126,9 @@ router.post(
           promotion.promotionPrice,
           promotion.promotionActive,
           promotion.promotionStartsAt,
-          promotion.promotionEndsAt
+          promotion.promotionEndsAt,
+          gtexCodprod,
+          gtexCodbarra
         ]
       );
 
@@ -1153,8 +1181,19 @@ router.put(
       const description = String(req.body?.description || "").trim();
       const category = String(req.body?.category || "").trim();
       const price = parseMoney(req.body?.price, "Preço");
+      const gtexCodprodRaw = String(req.body?.gtexCodprod ?? "").trim();
+      const gtexCodprod = gtexCodprodRaw ? Number(gtexCodprodRaw) : null;
+      const gtexCodbarra = String(req.body?.gtexCodbarra || "").trim() || null;
       const unitStock = normalizeProductInventory(req.body?.unitStock || {});
       const active = req.body?.active !== false;
+
+      if (gtexCodprodRaw && (!Number.isInteger(gtexCodprod) || gtexCodprod <= 0)) {
+        return res.status(400).json({ ok: false, message: "CODPROD GTEX inválido." });
+      }
+
+      if (gtexCodbarra && gtexCodbarra.length > 80) {
+        return res.status(400).json({ ok: false, message: "CODBARRA GTEX muito longo." });
+      }
 
       if (!name) {
         return res.status(400).json({ ok: false, message: "Informe o nome do produto." });
@@ -1196,8 +1235,10 @@ router.put(
             promotion_active = $9,
             promotion_starts_at = $10,
             promotion_ends_at = $11,
+            gtex_codprod = $12,
+            gtex_codbarra = $13,
             updated_at = NOW()
-          WHERE id = $12
+          WHERE id = $14
           RETURNING *
         `,
         [
@@ -1212,6 +1253,8 @@ router.put(
           promotion.promotionActive,
           promotion.promotionStartsAt,
           promotion.promotionEndsAt,
+          gtexCodprod,
+          gtexCodbarra,
           id
         ]
       );
@@ -1354,6 +1397,30 @@ router.patch(
       return res.status(error.status || 500).json({
         ok: false,
         message: error.status ? error.message : "Erro ao atualizar o ícone da categoria."
+      });
+    }
+  }
+);
+
+router.delete(
+  "/api/admin/manager/categories/:id",
+  autenticarAdmin,
+  exigirGerente,
+  async (req, res) => {
+    try {
+      const result = await deleteCategory(req.params.id);
+      return res.json({
+        ok: true,
+        message: result.movedProducts > 0
+          ? `Categoria excluída. ${result.movedProducts} produto(s) foram movidos para Outros.`
+          : "Categoria excluída.",
+        ...result
+      });
+    } catch (error) {
+      console.error("DELETE /api/admin/manager/categories/:id:", error);
+      return res.status(error.status || 500).json({
+        ok: false,
+        message: error.status ? error.message : "Erro ao excluir a categoria."
       });
     }
   }

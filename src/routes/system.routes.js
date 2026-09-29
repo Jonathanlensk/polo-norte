@@ -1,6 +1,7 @@
 const express = require("express");
 const db = require("../../database/db");
 const { getStoreSettings, publicSettings } = require("../services/store-settings.service");
+const { getGtexConfigStatus } = require("../services/gtex.service");
 
 const router = express.Router();
 
@@ -27,7 +28,16 @@ router.get("/api/health", async (req, res) => {
         !/COLOQUE|SUA_PUBLIC_KEY|PUBLIC_KEY_AQUI/i.test(
           String(process.env.MERCADO_PAGO_PUBLIC_KEY || "")
         )
-      )
+      ),
+      gtex: (() => {
+        const config = getGtexConfigStatus();
+        return {
+          configured: config.configured,
+          enabled: config.enabled,
+          filiais: config.filiais,
+          codcli: config.codcli
+        };
+      })()
     });
 
   } catch (error) {
