@@ -86,6 +86,13 @@ const ADMIN_UNITS = [
   { id: "divino", name: "Largo do Divino" }
 ];
 
+let orderAudioContext = null;
+let readyOrdersInitialized = false;
+const knownReadyOrderNumbers = new Set();
+let lastOrderBellAt = 0;
+const ORDER_BELL_REPEAT_MS = 30000;
+
+
 function categoryIconOption(key) {
   return CATEGORY_ICON_OPTIONS.find((option) => option.key === key)
     || CATEGORY_ICON_OPTIONS.find((option) => option.key === "presente");
@@ -142,6 +149,295 @@ function dateTime(value) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+
+function isOrderReadyForSeparation(order) {
+  return order?.orderStatus === "received" && order?.paymentStatus === "approved";
+}
+
+function unlockOrderAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!orderAudioContext) orderAudioContext = new AudioContextClass();
+    if (orderAudioContext.state === "suspended") {
+      orderAudioContext.resume().catch(() => {});
+    }
+  } catch (error) {
+    console.warn("Não foi possível ativar o som de novos pedidos:", error);
+  }
+}
+
+function playSyntheticOrderBell() {
+  unlockOrderAudio();
+  if (!orderAudioContext || orderAudioContext.state !== "running") return;
+
+  // Alarme estilo "TRIZZZ... TRIZZZ..." para ser bem perceptível à distância.
+  // Faz rajadas longas com vibração rápida de frequência, lembrando uma
+  // campainha/buzzer de balcão, e repete enquanto houver pedido aguardando.
+  const now = orderAudioContext.currentTime;
+
+  const compressor = orderAudioContext.createDynamicsCompressor();
+  compressor.threshold.setValueAtTime(-18, now);
+  compressor.knee.setValueAtTime(4, now);
+  compressor.ratio.setValueAtTime(14, now);
+  compressor.attack.setValueAtTime(0.001, now);
+  compressor.release.setValueAtTime(0.12, now);
+  compressor.connect(orderAudioContext.destination);
+
+  const master = orderAudioContext.createGain();
+  master.gain.setValueAtTime(0.98, now);
+  master.connect(compressor);
+
+  // 9 pares de "TRIZZZ / TRIZZZ" (~9 segundos no total).
+  const groups = 9;
+  const groupStep = 0.98;
+
+  for (let group = 0; group < groups; group += 1) {
+    const groupStart = now + (group * groupStep);
+
+    // Duas rajadas por grupo para dar exatamente o efeito "trizzz, trizzz".
+    for (let burst = 0; burst < 2; burst += 1) {
+      const start = groupStart + (burst * 0.43);
+      const end = start + 0.31;
+
+      const envelope = orderAudioContext.createGain();
+      envelope.gain.setValueAtTime(0.0001, start);
+      envelope.gain.exponentialRampToValueAtTime(1, start + 0.008);
+      envelope.gain.setValueAtTime(1, end - 0.025);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, end);
+      envelope.connect(master);
+
+      // Tom principal áspero, na faixa que atravessa bem ruído ambiente.
+      const mainTone = orderAudioContext.createOscillator();
+      mainTone.type = "sawtooth";
+      mainTone.frequency.setValueAtTime(1450, start);
+      mainTone.frequency.linearRampToValueAtTime(2050, start + 0.07);
+      mainTone.frequency.linearRampToValueAtTime(1550, start + 0.14);
+      mainTone.frequency.linearRampToValueAtTime(2150, start + 0.21);
+      mainTone.frequency.linearRampToValueAtTime(1650, end);
+      mainTone.connect(envelope);
+      mainTone.start(start);
+      mainTone.stop(end);
+
+      // Segundo tom deslocado dá o "zrrr/trizzz" metálico.
+      const secondGain = orderAudioContext.createGain();
+      secondGain.gain.setValueAtTime(0.48, start);
+      secondGain.connect(envelope);
+
+      const secondTone = orderAudioContext.createOscillator();
+      secondTone.type = "square";
+      secondTone.frequency.setValueAtTime(2280, start);
+      secondTone.frequency.linearRampToValueAtTime(2850, start + 0.08);
+      secondTone.frequency.linearRampToValueAtTime(2350, start + 0.16);
+      secondTone.frequency.linearRampToValueAtTime(3000, start + 0.24);
+      secondTone.frequency.linearRampToValueAtTime(2450, end);
+      secondTone.connect(secondGain);
+      secondTone.start(start);
+      secondTone.stop(end);
+
+      // Modulação rápida de volume deixa o som tremido: "trrrrrizzz".
+      const tremolo = orderAudioContext.createOscillator();
+      const tremoloGain = orderAudioContext.createGain();
+      tremolo.type = "square";
+      tremolo.frequency.setValueAtTime(32, start);
+      tremoloGain.gain.setValueAtTime(0.20, start);
+      tremolo.connect(tremoloGain);
+      tremoloGain.connect(envelope.gain);
+      tremolo.start(start);
+      tremolo.stop(end);
+    }
+  }
+}
+
+
+const ORDER_BUZZER_URL = "https://scuba.cs.uchicago.edu/summer2024/sounds/mixkit-apartment-buzzer-bell-press-932.wav";
+let orderBuzzerAudio = null;
+
+function playOrderBell() {
+  try {
+    if (!orderBuzzerAudio) {
+      orderBuzzerAudio = new Audio(ORDER_BUZZER_URL);
+      orderBuzzerAudio.preload = "auto";
+      orderBuzzerAudio.volume = 1;
+    }
+
+    // Repete o buzzer em rajadas para dar o efeito "TRIZZZ... TRIZZZ..."
+    // e deixar o alerta perceptível à distância.
+    let plays = 0;
+    const maxPlays = 8;
+    const playOnce = () => {
+      if (!orderBuzzerAudio) return;
+      orderBuzzerAudio.currentTime = 0;
+      const p = orderBuzzerAudio.play();
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {
+          if (plays === 0) playSyntheticOrderBell();
+        });
+      }
+      plays += 1;
+      if (plays < maxPlays) setTimeout(playOnce, 900);
+    };
+    playOnce();
+  } catch (error) {
+    console.warn("Falha ao tocar buzzer externo; usando alarme interno.", error);
+    playSyntheticOrderBell();
+  }
+}
+
+
+function showNewOrderToast(orders) {
+  document.querySelector(".new-order-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "new-order-toast";
+  const first = orders[0];
+  toast.innerHTML = `
+    <span class="new-order-toast-icon">🔔</span>
+    <div>
+      <strong>${orders.length > 1 ? `${orders.length} pedidos aguardando separação` : "Pedido aguardando separação"}</strong>
+      <small>${first ? `${escapeHtml(first.orderNumber)} · ${escapeHtml(first.customerName)} · o alarme repetirá até iniciar a separação` : "O alarme repetirá até iniciar a separação."}</small>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 12000);
+}
+
+function trackReadyOrders(orders = []) {
+  const readyOrders = orders.filter(isOrderReadyForSeparation);
+  const now = Date.now();
+
+  const newOrders = readyOrders.filter(
+    (order) => !knownReadyOrderNumbers.has(order.orderNumber)
+  );
+
+  // Mantém o conjunto somente com os pedidos que ainda aguardam separação.
+  // Assim que o operador inicia a separação, o pedido sai daqui e o alarme
+  // deixa de ser repetido para ele.
+  knownReadyOrderNumbers.clear();
+  readyOrders.forEach((order) => knownReadyOrderNumbers.add(order.orderNumber));
+
+  if (!readyOrdersInitialized) {
+    readyOrdersInitialized = true;
+  }
+
+  if (!readyOrders.length) {
+    lastOrderBellAt = 0;
+    return [];
+  }
+
+  const repeatDue = !lastOrderBellAt || (now - lastOrderBellAt) >= ORDER_BELL_REPEAT_MS;
+  const shouldRing = newOrders.length > 0 || repeatDue;
+
+  if (shouldRing) {
+    lastOrderBellAt = now;
+    playOrderBell();
+    showNewOrderToast(newOrders.length ? newOrders : readyOrders);
+  }
+
+  return newOrders;
+}
+
+function openReceiptWindow() {
+  const printWindow = window.open("", "_blank", "width=430,height=720");
+  if (!printWindow) return null;
+
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Cupom de separação</title></head><body style="font-family:Arial,sans-serif;padding:24px">Preparando cupom...</body></html>`);
+  printWindow.document.close();
+  return printWindow;
+}
+
+function renderSeparationReceipt(order, printWindow) {
+  if (!printWindow || !order) return false;
+
+  const items = (order.items || []).map((item) => `
+    <div class="receipt-item">
+      <strong>${escapeHtml(item.quantity)}x ${escapeHtml(item.productName)}</strong>
+      <span>${money(item.subtotal)}</span>
+    </div>
+  `).join("");
+
+  const payment = `${PAYMENT_METHOD_TEXT[order.paymentMethod] || order.paymentMethod} · ${PAYMENT_STATUS_TEXT[order.paymentStatus] || order.paymentStatus}`;
+
+  printWindow.document.open();
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8">
+        <title>${escapeHtml(order.orderNumber)} - Separação</title>
+        <style>
+          @page { size: 80mm auto; margin: 3mm; }
+          * { box-sizing: border-box; }
+          body { width: 72mm; margin: 0 auto; color: #000; font-family: "Courier New", monospace; font-size: 11px; line-height: 1.35; }
+          h1 { font-size: 16px; text-align: center; margin: 0 0 2px; }
+          h2 { font-size: 13px; text-align: center; margin: 0 0 8px; }
+          .center { text-align: center; }
+          .separator { border-top: 1px dashed #000; margin: 8px 0; }
+          .label { font-size: 9px; text-transform: uppercase; font-weight: 700; display: block; margin-top: 5px; }
+          .value { font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+          .receipt-item { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dotted #777; }
+          .receipt-item strong { flex: 1; }
+          .receipt-item span { white-space: nowrap; }
+          .total-row { display: flex; justify-content: space-between; margin: 3px 0; }
+          .grand-total { font-size: 14px; font-weight: 900; }
+          .footer { margin-top: 14px; font-size: 9px; }
+          @media print { body { width: 72mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>POLO NORTE BEBIDAS</h1>
+        <h2>CUPOM DE SEPARAÇÃO</h2>
+        <div class="center"><strong>${escapeHtml(order.orderNumber)}</strong></div>
+        <div class="separator"></div>
+
+        <span class="label">Unidade</span>
+        <div class="value">${escapeHtml(order.unitName || "—")}</div>
+        <span class="label">Cliente</span>
+        <div class="value">${escapeHtml(order.customerName || "—")}</div>
+        <span class="label">Telefone</span>
+        <div>${escapeHtml(order.customerPhone || "—")}</div>
+        <span class="label">Endereço de entrega</span>
+        <div class="value">${escapeHtml(order.deliveryAddress || "—")}</div>
+        ${order.deliveryReference ? `<span class="label">Referência</span><div>${escapeHtml(order.deliveryReference)}</div>` : ""}
+        <span class="label">Pagamento</span>
+        <div>${escapeHtml(payment)}</div>
+        <span class="label">Pedido criado em</span>
+        <div>${escapeHtml(dateTime(order.createdAt))}</div>
+
+        <div class="separator"></div>
+        <strong>ITENS</strong>
+        ${items || "<div>Nenhum item encontrado.</div>"}
+        <div class="separator"></div>
+        <div class="total-row"><span>Subtotal</span><strong>${money(order.subtotal)}</strong></div>
+        <div class="total-row"><span>Entrega</span><strong>${money(order.deliveryFee)}</strong></div>
+        <div class="total-row grand-total"><span>TOTAL</span><strong>${money(order.total)}</strong></div>
+        <div class="separator"></div>
+        <div class="footer">
+          Separação iniciada pelo painel do operador.<br>
+          Conferido por: __________________________
+        </div>
+        <script>
+          window.addEventListener('load', () => {
+            window.focus();
+            setTimeout(() => window.print(), 250);
+          });
+        <\/script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  return true;
+}
+
+function printSeparationReceipt(order) {
+  const printWindow = openReceiptWindow();
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site e tente novamente.");
+    return;
+  }
+  renderSeparationReceipt(order, printWindow);
 }
 
 function dateTimeLocal(value) {
@@ -362,7 +658,17 @@ function renderOrdersView() {
                   <td class="cell-main">${money(order.total)}</td>
                   <td>${dateTime(order.createdAt)}</td>
                   <td>
-                    <button class="secondary-button" data-open-order="${escapeHtml(order.orderNumber)}">Ver pedido</button>
+                    <div class="order-actions">
+                      ${order.orderStatus === "received" ? `
+                        <button
+                          class="primary-button order-start-button"
+                          data-start-separation="${escapeHtml(order.orderNumber)}"
+                          ${order.paymentStatus !== "approved" ? "disabled" : ""}
+                          title="${order.paymentStatus !== "approved" ? "Aguardando aprovação do pagamento" : "Iniciar separação e imprimir cupom"}"
+                        >Iniciar separação</button>
+                      ` : ""}
+                      <button class="secondary-button" data-open-order="${escapeHtml(order.orderNumber)}">Ver pedido</button>
+                    </div>
                   </td>
                 </tr>
               `).join("")}
@@ -1040,6 +1346,14 @@ function renderOrderModal(order) {
             ${detailCard("Total", money(order.total))}
             ${detailCard("Status atual", ORDER_STATUS_TEXT[order.orderStatus] || order.orderStatus)}
           </div>
+          <div class="order-modal-actions">
+            ${isOrderReadyForSeparation(order) ? `
+              <button class="primary-button" id="startSeparationButton" type="button">Iniciar separação e imprimir</button>
+            ` : ""}
+            ${order.paymentStatus === "approved" ? `
+              <button class="secondary-button" id="printOrderButton" type="button">Imprimir cupom</button>
+            ` : ""}
+          </div>
           <div class="status-editor">
             <div class="field">
               <label for="orderStatusSelect">Atualizar status do pedido</label>
@@ -1221,6 +1535,9 @@ function bindCurrentViewEvents() {
     document.querySelectorAll("[data-open-order]").forEach((button) => {
       button.addEventListener("click", () => openOrder(button.dataset.openOrder));
     });
+    document.querySelectorAll("[data-start-separation]").forEach((button) => {
+      button.addEventListener("click", () => startSeparation(button.dataset.startSeparation, button));
+    });
     return;
   }
 
@@ -1334,6 +1651,12 @@ function bindCurrentViewEvents() {
 function bindModalEvents() {
   document.getElementById("closeOrderModal")?.addEventListener("click", closeOrder);
   document.getElementById("saveStatusButton")?.addEventListener("click", updateOrderStatus);
+  document.getElementById("startSeparationButton")?.addEventListener("click", () => {
+    if (state.selectedOrder) startSeparation(state.selectedOrder.orderNumber, document.getElementById("startSeparationButton"));
+  });
+  document.getElementById("printOrderButton")?.addEventListener("click", () => {
+    if (state.selectedOrder) printSeparationReceipt(state.selectedOrder);
+  });
   document.getElementById("closeProductModal")?.addEventListener("click", closeProduct);
   document.getElementById("cancelProductButton")?.addEventListener("click", closeProduct);
   document.getElementById("productForm")?.addEventListener("submit", saveProduct);
@@ -1384,6 +1707,7 @@ async function request(url, options = {}) {
 
 async function login(event) {
   event.preventDefault();
+  unlockOrderAudio();
   state.loginError = "";
   const login = document.getElementById("adminLogin").value.trim();
   const senha = document.getElementById("adminSenha").value;
@@ -1415,6 +1739,9 @@ async function logout() {
   state.settings = null;
   state.selectedOrder = null;
   state.selectedProduct = null;
+  knownReadyOrderNumbers.clear();
+  readyOrdersInitialized = false;
+  lastOrderBellAt = 0;
   renderLogin();
 }
 
@@ -1451,7 +1778,9 @@ async function loadOrders() {
     if (state.filterStatus) params.set("status", state.filterStatus);
     if (state.search) params.set("search", state.search);
     const data = await request(`/api/admin/orders?${params.toString()}`);
-    state.orders = data.orders || [];
+    const loadedOrders = data.orders || [];
+    if (!isManager()) trackReadyOrders(loadedOrders);
+    state.orders = loadedOrders;
     state.summary = data.summary || state.summary;
     if (isManager()) await loadManagerOverview();
   } catch (error) {
@@ -1737,6 +2066,74 @@ async function openOrder(orderNumber) {
 function closeOrder() {
   state.selectedOrder = null;
   renderDashboard();
+}
+
+async function startSeparation(orderNumber, button = null) {
+  if (!orderNumber) return;
+
+  unlockOrderAudio();
+  const printWindow = openReceiptWindow();
+  const originalText = button?.textContent || "Iniciar separação";
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Iniciando...";
+  }
+
+  try {
+    const details = await request(`/api/admin/orders/${encodeURIComponent(orderNumber)}`);
+    const order = details.order;
+
+    if (order.paymentStatus !== "approved") {
+      throw new Error("Aguarde a aprovação do pagamento antes de iniciar a separação.");
+    }
+
+    if (order.orderStatus === "received") {
+      await request(`/api/admin/orders/${encodeURIComponent(orderNumber)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ orderStatus: "preparing" })
+      });
+      order.orderStatus = "preparing";
+    }
+
+    state.selectedOrder = order;
+    const printed = renderSeparationReceipt(order, printWindow);
+    await loadOrders();
+    await openOrder(orderNumber);
+
+    if (!printed) {
+      alert("A separação foi iniciada, mas o navegador bloqueou a janela de impressão. Libere pop-ups e use o botão ‘Imprimir cupom’ dentro do pedido.");
+    }
+  } catch (error) {
+    if (printWindow && !printWindow.closed) printWindow.close();
+    alert(error.message);
+    if (button && document.body.contains(button)) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function monitorNewReadyOrders() {
+  if (!state.admin || isManager()) return;
+
+  try {
+    const data = await request("/api/admin/orders?status=received");
+    const newOrders = trackReadyOrders(data.orders || []);
+
+    if (
+      newOrders.length &&
+      state.view === "orders" &&
+      !state.selectedOrder &&
+      !state.selectedProduct &&
+      !state.loading
+    ) {
+      await loadOrders();
+    }
+  } catch (error) {
+    if (error.status === 401) return;
+    console.warn("Monitor de novos pedidos:", error.message);
+  }
 }
 
 async function updateOrderStatus() {
@@ -2100,6 +2497,11 @@ async function bootstrap() {
     renderLogin();
   }
 }
+
+document.addEventListener("pointerdown", unlockOrderAudio, { passive: true });
+document.addEventListener("keydown", unlockOrderAudio);
+
+setInterval(monitorNewReadyOrders, 7000);
 
 setInterval(() => {
   if (

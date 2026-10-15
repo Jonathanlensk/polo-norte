@@ -1074,13 +1074,8 @@ async function syncOrderToGtex(orderId, { force = false } = {}) {
   }
 
   const deliveryFee = Number(order.delivery_fee || 0);
-  const deliveryBarcode = text(process.env.GTEX_DELIVERY_CODBARRA);
-  const allowFeeInObs = String(process.env.GTEX_ALLOW_DELIVERY_FEE_IN_OBS || "false").toLowerCase() === "true";
-
-  if (deliveryFee > 0 && !deliveryBarcode && !allowFeeInObs) {
-    const error = new Error(
-      "O pedido possui taxa de entrega. Configure GTEX_DELIVERY_CODBARRA ou GTEX_ALLOW_DELIVERY_FEE_IN_OBS=true antes de enviar ao GTEX."
-    );
+  if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+    const error = new Error("Valor de frete inválido para envio ao GTEX.");
     error.status = 409;
     await markGtexError(order.id, error);
     throw error;
@@ -1093,15 +1088,6 @@ async function syncOrderToGtex(orderId, { force = false } = {}) {
     obs: ""
   }));
 
-  if (deliveryFee > 0 && deliveryBarcode) {
-    items.push({
-      codbarra: deliveryBarcode,
-      qt: 1,
-      punit: deliveryFee,
-      obs: "Taxa de entrega e-commerce"
-    });
-  }
-
   const payload = {
     seuid: order.order_number,
     codfilial,
@@ -1110,7 +1096,8 @@ async function syncOrderToGtex(orderId, { force = false } = {}) {
     codplpag: payment.codplpag,
     codcob: payment.codcob,
     origemvenda,
-    obs: `${orderObservation(order)}${deliveryFee > 0 && !deliveryBarcode ? ` | Taxa entrega: R$ ${deliveryFee.toFixed(2)}` : ""}`,
+    obs: orderObservation(order),
+    vlfrete: Number(deliveryFee.toFixed(2)),
     itens: items
   };
 

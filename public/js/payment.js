@@ -103,7 +103,20 @@ function mensagemErroBrickMercadoPago(erro) {
     return "O formulário de cartão do Mercado Pago encontrou um erro. Confira a Public Key e tente novamente.";
 }
 
+function erroBrickNaoCritico(erro) {
+    return String(erro?.type || "")
+        .trim()
+        .toLowerCase() === "non_critical";
+}
+
 function exibirErroBrickMercadoPago(erro) {
+    // O SDK do Mercado Pago pode emitir avisos do tipo non_critical
+    // durante atualizacoes internas do Brick/3DS. Eles nao devem
+    // derrubar a tela nem ser tratados como falha do pagamento.
+    if (erroBrickNaoCritico(erro)) {
+        return;
+    }
+
     const box = document.getElementById(
         "card-payment-integration-error"
     );
@@ -298,6 +311,16 @@ async function montarCardPaymentBrick() {
                                 );
 
                                 resolve();
+
+                                // Depois que o backend respondeu e o Brick
+                                // concluiu o submit, limpamos a instancia antiga.
+                                // Isso evita que o Brick continue emitindo avisos
+                                // enquanto a tela 3DS/status ja esta aberta.
+                                if (estado.tela !== "pagamento") {
+                                    setTimeout(() => {
+                                        desmontarCardPaymentBrick();
+                                    }, 0);
+                                }
                             } catch (erro) {
                                 console.error(
                                     "Erro ao enviar pagamento com cartão:",
@@ -310,6 +333,14 @@ async function montarCardPaymentBrick() {
                 },
 
                 onError: (erro) => {
+                    if (erroBrickNaoCritico(erro)) {
+                        console.warn(
+                            "Card Payment Brick (aviso nao critico):",
+                            erro
+                        );
+                        return;
+                    }
+
                     console.error(
                         "Card Payment Brick:",
                         erro
